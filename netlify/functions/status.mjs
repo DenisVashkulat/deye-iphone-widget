@@ -20,7 +20,7 @@ async function deyeRequest(path, token, body) {
   });
   const data = await response.json();
   if (!response.ok || data.success === false) {
-    throw new Error(data.msg || `Deye API error (${response.status})`);
+    throw new Error(`station_latest: ${data.msg || `Deye API error (${response.status})`}; HTTP ${response.status}; code ${data.code ?? "n/a"}`);
   }
   return data;
 }
@@ -51,7 +51,7 @@ async function getToken() {
   });
   const data = await response.json();
   if (!response.ok || data.success === false || !data.accessToken) {
-    throw new Error(data.msg || "DeyeCloud authorization failed.");
+    throw new Error(`account_token: ${data.msg || "DeyeCloud authorization failed."}; HTTP ${response.status}; code ${data.code ?? "n/a"}`);
   }
   return data.accessToken;
 }

@@ -66,9 +66,23 @@ try {
 
     row("Нагрузка", Math.round(Number(data.consumptionW) || 0) + " Вт");
     w.addSpacer(5);
-    row("Солнце", Math.round(Number(data.generationW) || 0) + " Вт");
-    w.addSpacer(5);
-    row("Сеть", data.gridW == null ? "Нет данных" : Math.round(Number(data.gridW)) + " Вт");
+
+    const lastLightText = data.lastGridPowerAt
+      ? new Date(Number(data.lastGridPowerAt)).toLocaleString("ru-UA", {
+          day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"
+        })
+      : "Пока нет данных";
+    row("Последний раз был свет", lastLightText);
+
+    w.addSpacer(7);
+    const updatedAt = data.cacheFetchedAt
+      ? new Date(Number(data.cacheFetchedAt)).toLocaleTimeString("ru-UA", {
+          hour: "2-digit", minute: "2-digit"
+        })
+      : "—";
+    const updated = w.addText("Обновлено: " + updatedAt);
+    updated.font = Font.systemFont(10);
+    updated.textColor = new Color("#9BAABD");
   }
 } catch (e) {
   const error = w.addText("ОШИБКА ПОДКЛЮЧЕНИЯ");

@@ -6,33 +6,95 @@
   <meta name="theme-color" content="#101722">
   <title>Deye Power</title>
   <style>
-    *{box-sizing:border-box}body{margin:0;background:#101722;color:#f4f7fb;font:16px -apple-system,BlinkMacSystemFont,sans-serif;padding:28px 18px}
-    main{max-width:520px;margin:auto}.muted{color:#9baabd}.panel{background:#1b2736;border:1px solid #2c3a4c;border-radius:20px;padding:20px;margin:14px 0}
-    .soc{font-size:58px;font-weight:700;letter-spacing:-2px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    .value{font-size:25px;font-weight:650;margin-top:8px}.label{font-size:13px;color:#9baabd}
-    h1{font-size:26px;margin:0 0 6px}.bar{height:9px;background:#334255;border-radius:9px;overflow:hidden;margin-top:12px}.fill{height:100%;background:#57d69a;width:0}
+    *{box-sizing:border-box}
+    body{margin:0;background:#101722;color:#f4f7fb;font:16px -apple-system,BlinkMacSystemFont,sans-serif;padding:28px 18px}
+    main{max-width:520px;margin:auto}
+    .muted{color:#9baabd}
+    .panel{background:#1b2736;border:1px solid #2c3a4c;border-radius:20px;padding:20px;margin:14px 0}
+    .soc{font-size:58px;font-weight:700;letter-spacing:-2px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .value{font-size:25px;font-weight:650;margin-top:8px}
+    .label{font-size:13px;color:#9baabd}
+    h1{font-size:26px;margin:0 0 6px}
+    .bar{height:9px;background:#334255;border-radius:9px;overflow:hidden;margin-top:12px}
+    .fill{height:100%;background:#57d69a;width:0}
     #message{line-height:1.5}
+    .status{font-size:22px;font-weight:700;margin-top:8px}
+    .status.on{color:#57d69a}.status.off{color:#ff7777}.status.unknown{color:#f2c66d}
+    .last-light{font-size:21px;font-weight:650;margin-top:8px}
   </style>
 </head>
 <body><main>
   <h1>Deye Power</h1><div class="muted">Мониторинг инвертора</div>
-  <section class="panel"><div class="label">Заряд аккумулятора</div><div class="soc" id="soc">—%</div><div class="bar"><div class="fill" id="fill"></div></div><div class="muted" id="runtime">Остаток времени: —</div></section>
+
+  <section class="panel">
+    <div class="label">Состояние электросети</div>
+    <div class="status unknown" id="grid-status">● Проверяем…</div>
+    <div class="label" style="margin-top:9px">Последнее появление света</div>
+    <div class="last-light" id="last-light">Пока нет данных</div>
+  </section>
+
+  <section class="panel">
+    <div class="label">Заряд аккумулятора</div>
+    <div class="soc" id="soc">—%</div>
+    <div class="bar"><div class="fill" id="fill"></div></div>
+    <div class="muted" id="runtime">Остаток времени: —</div>
+  </section>
+
   <div class="grid">
     <section class="panel"><div class="label">Нагрузка</div><div class="value" id="load">— W</div></section>
     <section class="panel"><div class="label">Солнечная генерация</div><div class="value" id="solar">— W</div></section>
-    <section class="panel"><div class="label">Сеть</div><div class="value" id="grid">—</div></section>
+    <section class="panel"><div class="label">Мощность сети</div><div class="value" id="grid-power">— W</div></section>
     <section class="panel"><div class="label">Аккумулятор</div><div class="value" id="battery">— W</div></section>
   </div>
   <section class="panel"><div id="message" class="muted">Загружаем данные…</div></section>
 </main>
 <script>
 const el=id=>document.getElementById(id);
-function hours(v){if(v==null||!Number.isFinite(v))return "не рассчитывается";const h=Math.floor(v),m=Math.round((v-h)*60);return h+" ч "+m+" мин"}
-async function refresh(){try{const r=await fetch("/.netlify/functions/status",{cache:"no-store"});const d=await r.json();if(!r.ok)throw Error(d.error||"Ошибка API");if(!d.configured){el("message").textContent=d.message;return}
-el("soc").textContent=Math.round(d.batteryPercent)+"%";el("fill").style.width=Math.max(0,Math.min(100,d.batteryPercent))+"%";
-el("runtime").textContent="Остаток времени: "+hours(d.remainingHours);el("load").textContent=Math.round(d.consumptionW)+" W";
-el("solar").textContent=Math.round(d.generationW)+" W";el("grid").textContent=d.gridW==null?"Нет данных":Math.round(d.gridW)+" W";
-el("battery").textContent=Math.round(d.batteryW)+" W";el("message").textContent="Обновлено: "+new Date(d.updatedAt).toLocaleString("ru-RU");
-}catch(e){el("message").textContent=e.message}}
-refresh();setInterval(refresh,60000);
+function hours(v){
+  if(v==null||!Number.isFinite(v))return "не рассчитывается";
+  const h=Math.floor(v),m=Math.round((v-h)*60);
+  return h+" ч "+m+" мин";
+}
+function dateTime(value){
+  if(value==null||!Number.isFinite(Number(value)))return "Пока нет данных";
+  const date=new Date(Number(value));
+  if(Number.isNaN(date.getTime()))return "Пока нет данных";
+  return date.toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
+}
+async function refresh(){
+  try{
+    const r=await fetch("/.netlify/functions/status",{cache:"no-store"});
+    const d=await r.json();
+    if(!r.ok)throw Error(d.error||"Ошибка API");
+    if(!d.configured){el("message").textContent=d.message||"Сервер не настроен";return;}
+
+    const status=el("grid-status");
+    if(d.gridPresent===true){
+      status.textContent="● СВЕТ ЕСТЬ";
+      status.className="status on";
+    }else if(d.gridPresent===false){
+      status.textContent="● СВЕТА НЕТ";
+      status.className="status off";
+    }else{
+      status.textContent="● СТАТУС НЕИЗВЕСТЕН";
+      status.className="status unknown";
+    }
+    el("last-light").textContent=dateTime(d.lastGridPowerAt);
+
+    const percent=Math.max(0,Math.min(100,Number(d.batteryPercent)||0));
+    el("soc").textContent=Math.round(percent)+"%";
+    el("fill").style.width=percent+"%";
+    el("runtime").textContent="Остаток времени: "+hours(d.remainingHours);
+    el("load").textContent=Math.round(Number(d.consumptionW)||0)+" W";
+    el("solar").textContent=Math.round(Number(d.generationW)||0)+" W";
+    el("grid-power").textContent=d.gridW==null?"Нет данных":Math.round(Number(d.gridW))+" W";
+    el("battery").textContent=Math.round(Number(d.batteryW)||0)+" W";
+    el("message").textContent="Обновлено: "+new Date(d.updatedAt||Date.now()).toLocaleString("ru-RU");
+  }catch(e){
+    el("message").textContent="Ошибка обновления: "+e.message;
+  }
+}
+refresh();
+setInterval(refresh,60000);
 </script></body></html>

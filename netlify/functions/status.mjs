@@ -122,6 +122,36 @@ async function runPermissionDiagnostic(stationId) {
     } catch (deviceError) {
       stationDevices = { accessible: false, error: deviceError.message };
     }
+    const inverter = (stationDevices?.items || []).find(device => device.deviceType === "INVERTER");
+    const inverterSn = inverter?.deviceSn || "2608156594";
+    let inverterMeasurePoints;
+    try {
+      const points = await deyeRequest("device/measurePoints", firstToken, {
+        deviceSn: inverterSn,
+        deviceType: "INVERTER"
+      });
+      inverterMeasurePoints = {
+        accessible: true,
+        deviceSn: inverterSn,
+        measurePoints: points.measurePoints || []
+      };
+    } catch (pointsError) {
+      inverterMeasurePoints = { accessible: false, deviceSn: inverterSn, error: pointsError.message };
+    }
+    let inverterLatest;
+    try {
+      const telemetry = await deyeRequest("device/latest", firstToken, {
+        deviceList: [inverterSn]
+      });
+      inverterLatest = {
+        accessible: true,
+        deviceSn: inverterSn,
+        // Keep the API's raw device telemetry so we can identify grid-voltage/frequency fields.
+        raw: telemetry.deviceDataList || telemetry.devices || telemetry
+      };
+    } catch (telemetryError) {
+      inverterLatest = { accessible: false, deviceSn: inverterSn, error: telemetryError.message };
+    }
     let historyPower;
     try {
       const history = await getStationHistoryPower(firstToken, stationId);
@@ -146,6 +176,8 @@ async function runPermissionDiagnostic(stationId) {
       latestData: latest,
       stationAlerts,
       stationDevices,
+      inverterMeasurePoints,
+      inverterLatest,
       historyPower
     };
   } catch (firstError) {

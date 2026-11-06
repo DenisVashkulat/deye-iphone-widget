@@ -153,7 +153,7 @@ export default async (request) => {
       return json(await runPermissionDiagnostic(stationId));
     }
 
-    // Every normal widget request also obtains a newly issued token.
+    // Fetch from Deye only when the cache is empty/stale or an authenticated scheduled refresh is requested.
     const token = await getToken();
     const raw = await getStationLatest(token, stationId);
 

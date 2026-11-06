@@ -18,9 +18,10 @@ async function deyeRequest(path, token, body) {
     },
     body: JSON.stringify(body)
   });
+
   const data = await response.json();
   if (!response.ok || data.success === false) {
-    throw new Error(`station_latest: ${data.msg || `Deye API error (${response.status})`}; HTTP ${response.status}; code ${data.code ?? "n/a"}`);
+    throw new Error(`${path}: ${data.msg || `Deye API error (${response.status})`}; HTTP ${response.status}; code ${data.code ?? "n/a"}`);
   }
   return data;
 }
@@ -56,11 +57,63 @@ async function getToken() {
   return data.accessToken;
 }
 
+async function getStationLatest(token, stationId) {
+  return deyeRequest("station/latest", token, { stationId: Number(stationId) });
+}
+
+async function runPermissionDiagnostic(stationId) {
+  // First token: verify authentication and station-list access.
+  const firstToken = await getToken();
+  const list = await deyeRequest("station/list", firstToken, { page: 1, size: 50 });
+  const stations = list.stationList || [];
+  const stationFound = stations.some(station => String(station.id) === String(stationId));
+
+  try {
+    const latest = await getStationLatest(firstToken, stationId);
+    return {
+      diagnostic: true,
+      token: "valid",
+      stationList: "accessible",
+      stationFound,
+      stationLatest: "accessible",
+      latestData: latest
+    };
+  } catch (firstError) {
+    // Explicitly obtain a second, newly issued token and retry the same API call.
+    const secondToken = await getToken();
+    try {
+      const latest = await getStationLatest(secondToken, stationId);
+      return {
+        diagnostic: true,
+        token: "fresh token issued",
+        stationList: "accessible",
+        stationFound,
+        firstAttempt: firstError.message,
+        stationLatest: "accessible after fresh-token retry",
+        latestData: latest
+      };
+    } catch (secondError) {
+      return {
+        diagnostic: true,
+        token: "two fresh tokens issued successfully",
+        stationList: "accessible",
+        stationFound,
+        firstAttempt: firstError.message,
+        secondAttempt: secondError.message,
+        stationLatest: "denied",
+        conclusion: "Authentication and station-list access work, but station/latest is denied even with a newly issued token. This points to an endpoint/account/application permission restriction on the Deye side."
+      };
+    }
+  }
+}
+
 export default async (request) => {
   try {
-    const token = await getToken();
     const requestUrl = new URL(request.url);
+    const stationId = process.env.DEYE_STATION_ID;
+
     if (requestUrl.searchParams.get("discover") === "1") {
+      const token = await getToken();
       const result = await deyeRequest("station/list", token, { page: 1, size: 50 });
       const stations = (result.stationList || []).map(station => ({
         id: station.id,
@@ -71,7 +124,6 @@ export default async (request) => {
       return json({ discovered: true, total: result.total ?? stations.length, stations });
     }
 
-    const stationId = process.env.DEYE_STATION_ID;
     if (!stationId) {
       return json({
         configured: false,
@@ -79,9 +131,13 @@ export default async (request) => {
       });
     }
 
-    const raw = await deyeRequest("station/latest", token, {
-      stationId: Number(stationId)
-    });
+    if (requestUrl.searchParams.get("diagnose") === "1") {
+      return json(await runPermissionDiagnostic(stationId));
+    }
+
+    // Every normal widget request also obtains a newly issued token.
+    const token = await getToken();
+    const raw = await getStationLatest(token, stationId);
 
     const soc = Number(raw.batterySOC ?? 0);
     const batteryPower = Number(raw.batteryPower ?? 0);

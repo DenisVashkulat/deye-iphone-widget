@@ -80,10 +80,48 @@ async function runPermissionDiagnostic(stationId) {
   const firstToken = await getToken();
   const list = await deyeRequest("station/list", firstToken, { page: 1, size: 50 });
   const stations = list.stationList || [];
-  const stationFound = stations.some(station => String(station.id) === String(stationId));
+  const station = stations.find(item => String(item.id) === String(stationId)) || null;
+  const stationFound = Boolean(station);
 
   try {
     const latest = await getStationLatest(firstToken, stationId);
+    const now = Math.floor(Date.now() / 1000);
+    let stationAlerts;
+    try {
+      const alerts = await deyeRequest("station/alert", firstToken, {
+        stationId: Number(stationId),
+        startTimestamp: now - 7 * 24 * 60 * 60,
+        endTimestamp: now,
+        page: 1,
+        size: 50
+      });
+      stationAlerts = {
+        accessible: true,
+        total: alerts.total ?? (alerts.stationAlertItems || []).length,
+        items: (alerts.stationAlertItems || []).slice(0, 10)
+      };
+    } catch (alertError) {
+      stationAlerts = { accessible: false, error: alertError.message };
+    }
+    let stationDevices;
+    try {
+      const devices = await deyeRequest("station/device", firstToken, {
+        stationIds: [Number(stationId)],
+        page: 1,
+        size: 20
+      });
+      stationDevices = {
+        accessible: true,
+        total: devices.total ?? (devices.deviceListItems || []).length,
+        items: (devices.deviceListItems || []).map(device => ({
+          deviceSn: device.deviceSn,
+          deviceType: device.deviceType,
+          connectStatus: device.connectStatus
+        }))
+      };
+    } catch (deviceError) {
+      stationDevices = { accessible: false, error: deviceError.message };
+    }
     let historyPower;
     try {
       const history = await getStationHistoryPower(firstToken, stationId);
@@ -100,8 +138,14 @@ async function runPermissionDiagnostic(stationId) {
       token: "valid",
       stationList: "accessible",
       stationFound,
+      stationStatus: station ? {
+        connectionStatus: station.connectionStatus,
+        lastUpdateTime: station.lastUpdateTime
+      } : null,
       stationLatest: "accessible",
       latestData: latest,
+      stationAlerts,
+      stationDevices,
       historyPower
     };
   } catch (firstError) {

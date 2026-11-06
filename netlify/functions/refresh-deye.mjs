@@ -1,8 +1,4 @@
 // Scheduled DeyeCloud poller: fetch one fresh snapshot every two minutes.
-export const config = {
-  schedule: "*/2 * * * *"
-};
-
 export default async () => {
   const siteUrl = process.env.URL;
   const appSecret = process.env.DEYE_APP_SECRET;

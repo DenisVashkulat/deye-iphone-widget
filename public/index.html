@@ -90,7 +90,7 @@ async function refresh(){
     el("solar").textContent=Math.round(Number(d.generationW)||0)+" W";
     el("grid-power").textContent=d.gridW==null?"Нет данных":Math.round(Number(d.gridW))+" W";
     el("battery").textContent=Math.round(Number(d.batteryW)||0)+" W";
-    el("message").textContent="Обновлено: "+new Date(d.updatedAt||Date.now()).toLocaleString("ru-RU");
+    el("message").textContent="Получено сервером: "+new Date(d.cacheFetchedAt||Date.now()).toLocaleString("ru-RU");
   }catch(e){
     el("message").textContent="Ошибка обновления: "+e.message;
   }

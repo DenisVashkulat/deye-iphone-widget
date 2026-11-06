@@ -1,4 +1,8 @@
+import { getStore } from "@netlify/blobs";
 const BASE_URL = process.env.DEYE_BASE_URL || "https://eu1-developer.deyecloud.com";
+const CACHE_STORE = getStore("deye-widget-cache", { region: "eu-central-1" });
+const CACHE_KEY = "latest";
+const CACHE_MAX_AGE_MS = 4 * 60 * 1000;
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), {
   status,
@@ -111,6 +115,20 @@ export default async (request) => {
   try {
     const requestUrl = new URL(request.url);
     const stationId = process.env.DEYE_STATION_ID;
+    const isScheduledRefresh =
+      request.headers.get("x-internal-refresh") === process.env.DEYE_APP_SECRET &&
+      Boolean(process.env.DEYE_APP_SECRET);
+    const forceRefresh = requestUrl.searchParams.get("refresh") === "1" && isScheduledRefresh;
+
+    // Serve the latest scheduled snapshot to the widget; do not call Deye on every iPhone refresh.
+    if (!forceRefresh && requestUrl.searchParams.get("discover") !== "1" &&
+        requestUrl.searchParams.get("diagnose") !== "1") {
+      const cached = await CACHE_STORE.get(CACHE_KEY, { type: "json", consistency: "strong" });
+      if (cached && cached.cacheFetchedAt &&
+          Date.now() - Number(cached.cacheFetchedAt) < CACHE_MAX_AGE_MS) {
+        return json({ ...cached, cacheAgeSeconds: Math.floor((Date.now() - Number(cached.cacheFetchedAt)) / 1000) });
+      }
+    }
 
     if (requestUrl.searchParams.get("discover") === "1") {
       const token = await getToken();
@@ -147,7 +165,7 @@ export default async (request) => {
     const usableKwh = Math.max(0, capacityKwh * (soc - reservePercent) / 100);
     const remainingHours = dischargeW > 30 ? usableKwh * 1000 / dischargeW : null;
 
-    return json({
+    const snapshot = {
       configured: true,
       updatedAt: raw.lastUpdateTime
         ? new Date(Number(raw.lastUpdateTime) * 1000).toISOString()
@@ -160,8 +178,11 @@ export default async (request) => {
       dischargeW,
       remainingHours,
       capacityKwh,
-      reservePercent
-    });
+      reservePercent,
+      cacheFetchedAt: Date.now()
+    };
+    await CACHE_STORE.setJSON(CACHE_KEY, snapshot);
+    return json({ ...snapshot, cacheAgeSeconds: 0 });
   } catch (error) {
     return json({ error: error.message || "Unknown server error" }, 500);
   }

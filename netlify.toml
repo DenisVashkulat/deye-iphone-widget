@@ -6,4 +6,4 @@
   node_bundler = "esbuild"
 
 [functions."refresh-deye"]
-  schedule = "*/2 * * * *"
+  schedule = "*/1 * * * *"

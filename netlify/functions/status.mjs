@@ -65,6 +65,16 @@ async function getStationLatest(token, stationId) {
   return deyeRequest("station/latest", token, { stationId: Number(stationId) });
 }
 
+async function getStationHistoryPower(token, stationId) {
+  const endTimestamp = Math.floor(Date.now() / 1000);
+  const startTimestamp = endTimestamp - 24 * 60 * 60;
+  return deyeRequest("station/history/power", token, {
+    stationId: Number(stationId),
+    startTimestamp,
+    endTimestamp
+  });
+}
+
 async function runPermissionDiagnostic(stationId) {
   // First token: verify authentication and station-list access.
   const firstToken = await getToken();
@@ -74,19 +84,42 @@ async function runPermissionDiagnostic(stationId) {
 
   try {
     const latest = await getStationLatest(firstToken, stationId);
+    let historyPower;
+    try {
+      const history = await getStationHistoryPower(firstToken, stationId);
+      historyPower = {
+        accessible: true,
+        total: history.total ?? (history.stationDataItems || []).length,
+        samples: (history.stationDataItems || []).slice(-5)
+      };
+    } catch (historyError) {
+      historyPower = { accessible: false, error: historyError.message };
+    }
     return {
       diagnostic: true,
       token: "valid",
       stationList: "accessible",
       stationFound,
       stationLatest: "accessible",
-      latestData: latest
+      latestData: latest,
+      historyPower
     };
   } catch (firstError) {
     // Explicitly obtain a second, newly issued token and retry the same API call.
     const secondToken = await getToken();
     try {
       const latest = await getStationLatest(secondToken, stationId);
+      let historyPower;
+      try {
+        const history = await getStationHistoryPower(secondToken, stationId);
+        historyPower = {
+          accessible: true,
+          total: history.total ?? (history.stationDataItems || []).length,
+          samples: (history.stationDataItems || []).slice(-5)
+        };
+      } catch (historyError) {
+        historyPower = { accessible: false, error: historyError.message };
+      }
       return {
         diagnostic: true,
         token: "fresh token issued",
@@ -94,7 +127,8 @@ async function runPermissionDiagnostic(stationId) {
         stationFound,
         firstAttempt: firstError.message,
         stationLatest: "accessible after fresh-token retry",
-        latestData: latest
+        latestData: latest,
+        historyPower
       };
     } catch (secondError) {
       return {

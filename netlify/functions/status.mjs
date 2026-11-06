@@ -121,12 +121,13 @@ export default async (request) => {
     const forceRefresh = requestUrl.searchParams.get("refresh") === "1" && isScheduledRefresh;
 
     // Serve the latest scheduled snapshot to the widget; do not call Deye on every iPhone refresh.
+    const previousSnapshot = await CACHE_STORE.get(CACHE_KEY, { type: "json", consistency: "strong" });
+
     if (!forceRefresh && requestUrl.searchParams.get("discover") !== "1" &&
         requestUrl.searchParams.get("diagnose") !== "1") {
-      const cached = await CACHE_STORE.get(CACHE_KEY, { type: "json", consistency: "strong" });
-      if (cached && cached.cacheFetchedAt &&
-          Date.now() - Number(cached.cacheFetchedAt) < CACHE_MAX_AGE_MS) {
-        return json({ ...cached, cacheAgeSeconds: Math.floor((Date.now() - Number(cached.cacheFetchedAt)) / 1000) });
+      if (previousSnapshot && previousSnapshot.cacheFetchedAt &&
+          Date.now() - Number(previousSnapshot.cacheFetchedAt) < CACHE_MAX_AGE_MS) {
+        return json({ ...previousSnapshot, cacheAgeSeconds: Math.floor((Date.now() - Number(previousSnapshot.cacheFetchedAt)) / 1000) });
       }
     }
 
@@ -164,6 +165,14 @@ export default async (request) => {
     const reservePercent = Number(process.env.BATTERY_RESERVE_PERCENT || 10);
     const usableKwh = Math.max(0, capacityKwh * (soc - reservePercent) / 100);
     const remainingHours = dischargeW > 30 ? usableKwh * 1000 / dischargeW : null;
+    const fetchedAt = Date.now();
+    const gridPowerValue = raw.gridPower == null ? null : Number(raw.gridPower);
+    // Record the latest moment when measurable grid power was present.
+    // If DeyeCloud omits gridPower (null), keep the last known timestamp.
+    const lastGridPowerAt = gridPowerValue != null && Number.isFinite(gridPowerValue) &&
+      Math.abs(gridPowerValue) > 20
+        ? fetchedAt
+        : (previousSnapshot?.lastGridPowerAt ?? null);
 
     const snapshot = {
       configured: true,
@@ -173,13 +182,14 @@ export default async (request) => {
       batteryPercent: soc,
       generationW: Number(raw.generationPower ?? 0),
       consumptionW: Number(raw.consumptionPower ?? 0),
-      gridW: raw.gridPower == null ? null : Number(raw.gridPower),
+      gridW: gridPowerValue,
+      lastGridPowerAt,
       batteryW: batteryPower,
       dischargeW,
       remainingHours,
       capacityKwh,
       reservePercent,
-      cacheFetchedAt: Date.now()
+      cacheFetchedAt: fetchedAt
     };
     await CACHE_STORE.setJSON(CACHE_KEY, snapshot);
     return json({ ...snapshot, cacheAgeSeconds: 0 });

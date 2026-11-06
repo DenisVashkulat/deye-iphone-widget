@@ -231,7 +231,14 @@ export default async (request) => {
     const forceRefresh = requestUrl.searchParams.get("refresh") === "1" && isScheduledRefresh;
 
     // Serve the latest scheduled snapshot to the widget; do not call Deye on every iPhone refresh.
-    const previousSnapshot = await CACHE_STORE.get(CACHE_KEY, { type: "json", consistency: "strong" });
+    let previousSnapshot = null;
+    let cacheAvailable = true;
+    try {
+      previousSnapshot = await CACHE_STORE.get(CACHE_KEY, { type: "json", consistency: "strong" });
+    } catch (cacheError) {
+      cacheAvailable = false;
+      console.warn("Netlify Blobs read failed; fetching fresh Deye data without cache:", cacheError.message);
+    }
 
     if (!forceRefresh && requestUrl.searchParams.get("discover") !== "1" &&
         requestUrl.searchParams.get("diagnose") !== "1") {
@@ -317,7 +324,13 @@ export default async (request) => {
       reservePercent,
       cacheFetchedAt: fetchedAt
     };
-    await CACHE_STORE.setJSON(CACHE_KEY, snapshot);
+    if (cacheAvailable) {
+      try {
+        await CACHE_STORE.setJSON(CACHE_KEY, snapshot);
+      } catch (cacheError) {
+        console.warn("Netlify Blobs write failed; returning fresh Deye data without saving cache:", cacheError.message);
+      }
+    }
     return json({ ...snapshot, cacheAgeSeconds: 0 });
   } catch (error) {
     return json({ error: error.message || "Unknown server error" }, 500);

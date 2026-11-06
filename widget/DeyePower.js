@@ -24,6 +24,19 @@ try {
   } else {
     w.addSpacer(5);
 
+    // Grid status is based on inverter grid voltage and frequency.
+    const gridStatus = w.addText(
+      data.gridPresent === true ? "●  СВЕТ ЕСТЬ" :
+      data.gridPresent === false ? "●  СВЕТА НЕТ" : "●  СТАТУС СЕТИ НЕИЗВЕСТЕН"
+    );
+    gridStatus.font = Font.boldSystemFont(13);
+    gridStatus.textColor = new Color(
+      data.gridPresent === true ? "#57D69A" :
+      data.gridPresent === false ? "#FF7777" : "#F2C66D"
+    );
+
+    w.addSpacer(6);
+
     const percent = Math.max(0, Math.min(100, Number(data.batteryPercent) || 0));
     const soc = w.addText(Math.round(percent) + "%");
     soc.font = Font.boldSystemFont(38);
@@ -39,7 +52,7 @@ try {
     fill.backgroundColor = new Color("#57D69A");
     fill.cornerRadius = 4;
 
-    w.addSpacer(12);
+    w.addSpacer(10);
 
     const hours = Number(data.remainingHours);
     const runtimeText = data.remainingHours == null || !Number.isFinite(hours)
@@ -51,7 +64,7 @@ try {
     runtime.font = Font.semiboldSystemFont(14);
     runtime.textColor = new Color("#57D69A");
 
-    w.addSpacer(10);
+    w.addSpacer(8);
 
     function row(label, value) {
       const line = w.addStack();

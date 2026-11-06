@@ -1,5 +1,5 @@
-// Scriptable widget for iPhone. Set API_URL to your deployed Netlify URL.
-const API_URL = "https://YOUR-SITE.netlify.app/.netlify/functions/status";
+// Scriptable widget for iPhone. DeyeCloud data via Netlify.
+const API_URL = "https://gentle-maamoul-1fc77c.netlify.app/.netlify/functions/status";
 const req = new Request(API_URL);
 req.timeoutInterval = 20;
 const data = await req.loadJSON();
@@ -48,11 +48,11 @@ if (data.error || !data.configured) {
     v.font = Font.semiboldSystemFont(12);
     v.textColor = Color.white();
   };
-  row("Нагрузка", Math.round(data.consumptionW) + " W");
+  row("Нагрузка", Math.round(data.consumptionW) + " Вт");
   w.addSpacer(4);
-  row("Солнце", Math.round(data.generationW) + " W");
+  row("Солнце", Math.round(data.generationW) + " Вт");
   w.addSpacer(4);
-  row("Сеть", data.gridW == null ? "—" : Math.round(data.gridW) + " W");
+  row("Сеть", data.gridW == null ? "нет данных" : Math.round(data.gridW) + " Вт");
 }
 w.refreshAfterDate = new Date(Date.now() + 15 * 60 * 1000);
 Script.setWidget(w);

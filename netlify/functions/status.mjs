@@ -1,13 +1,12 @@
 const BASE_URL = process.env.DEYE_BASE_URL || "https://eu1-developer.deyecloud.com";
 
-const json = (data, status = 200) => ({
-  statusCode: status,
+const json = (data, status = 200) => new Response(JSON.stringify(data), {
+  status,
   headers: {
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
     "Access-Control-Allow-Origin": "*"
-  },
-  body: JSON.stringify(data)
+  }
 });
 
 async function deyeRequest(path, token, body) {

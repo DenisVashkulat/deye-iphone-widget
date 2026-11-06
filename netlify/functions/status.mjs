@@ -56,8 +56,21 @@ async function getToken() {
   return data.accessToken;
 }
 
-export default async () => {
+export default async (request) => {
   try {
+    const token = await getToken();
+    const requestUrl = new URL(request.url);
+    if (requestUrl.searchParams.get("discover") === "1") {
+      const result = await deyeRequest("station/list", token, { page: 1, size: 50 });
+      const stations = (result.stationList || []).map(station => ({
+        id: station.id,
+        name: station.name,
+        installedCapacity: station.installedCapacity,
+        connectionStatus: station.connectionStatus
+      }));
+      return json({ discovered: true, total: result.total ?? stations.length, stations });
+    }
+
     const stationId = process.env.DEYE_STATION_ID;
     if (!stationId) {
       return json({
@@ -66,7 +79,6 @@ export default async () => {
       });
     }
 
-    const token = await getToken();
     const raw = await deyeRequest("station/latest", token, {
       stationId: Number(stationId)
     });

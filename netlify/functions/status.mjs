@@ -267,6 +267,21 @@ export default async (request) => {
     // Fetch from Deye only when the cache is empty/stale or an authenticated scheduled refresh is requested.
     const token = await getToken();
     const raw = await getStationLatest(token, stationId);
+    const inverterTelemetry = await deyeRequest("device/latest", token, {
+      deviceList: ["2608156594"]
+    });
+    const inverterRecord = (inverterTelemetry.deviceDataList || inverterTelemetry.devices || [])
+      .find(device => device.deviceSn === "2608156594") ||
+      (inverterTelemetry.deviceDataList || inverterTelemetry.devices || [])[0];
+    const inverterPoints = Object.fromEntries(
+      (inverterRecord?.dataList || []).map(point => [point.key, Number(point.value)])
+    );
+    const gridVoltageV = Number.isFinite(inverterPoints.GridVoltageL1L2)
+      ? inverterPoints.GridVoltageL1L2 : null;
+    const gridFrequencyHz = Number.isFinite(inverterPoints.GridFrequency)
+      ? inverterPoints.GridFrequency : null;
+    const gridPresent = gridVoltageV != null && gridVoltageV >= 180 &&
+      gridFrequencyHz != null && gridFrequencyHz >= 45 && gridFrequencyHz <= 55;
 
     const soc = Number(raw.batterySOC ?? 0);
     const batteryPower = Number(raw.batteryPower ?? 0);
@@ -277,12 +292,10 @@ export default async (request) => {
     const remainingHours = dischargeW > 30 ? usableKwh * 1000 / dischargeW : null;
     const fetchedAt = Date.now();
     const gridPowerValue = raw.gridPower == null ? null : Number(raw.gridPower);
-    // Record the latest moment when measurable grid power was present.
-    // If DeyeCloud omits gridPower (null), keep the last known timestamp.
-    const lastGridPowerAt = gridPowerValue != null && Number.isFinite(gridPowerValue) &&
-      Math.abs(gridPowerValue) > 20
-        ? fetchedAt
-        : (previousSnapshot?.lastGridPowerAt ?? null);
+    // Use actual inverter grid voltage/frequency because station/latest gridPower is null.
+    const lastGridPowerAt = gridPresent
+      ? (inverterRecord?.collectionTime ? Number(inverterRecord.collectionTime) * 1000 : fetchedAt)
+      : (previousSnapshot?.lastGridPowerAt ?? null);
 
     const snapshot = {
       configured: true,
@@ -293,6 +306,9 @@ export default async (request) => {
       generationW: Number(raw.generationPower ?? 0),
       consumptionW: Number(raw.consumptionPower ?? 0),
       gridW: gridPowerValue,
+      gridVoltageV,
+      gridFrequencyHz,
+      gridPresent,
       lastGridPowerAt,
       batteryW: batteryPower,
       dischargeW,

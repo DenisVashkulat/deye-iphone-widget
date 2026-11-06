@@ -64,7 +64,7 @@ export default async () => {
       return json({
         configured: false,
         message: "Add DEYE_STATION_ID in Netlify environment variables after we identify your station."
-      }, 200);
+      });
     }
 
     const token = await getToken();
@@ -72,22 +72,25 @@ export default async () => {
       stationId: Number(stationId)
     });
 
-    const soc = Number(raw.batterySOC ?? raw.batterySoc ?? 0);
+    const soc = Number(raw.batterySOC ?? 0);
     const batteryPower = Number(raw.batteryPower ?? 0);
+    const dischargeW = Math.max(0, Number(raw.dischargePower ?? 0));
     const capacityKwh = Number(process.env.BATTERY_CAPACITY_KWH || 5.12);
     const reservePercent = Number(process.env.BATTERY_RESERVE_PERCENT || 10);
     const usableKwh = Math.max(0, capacityKwh * (soc - reservePercent) / 100);
-    const dischargeW = batteryPower > 0 ? batteryPower : 0;
     const remainingHours = dischargeW > 30 ? usableKwh * 1000 / dischargeW : null;
 
     return json({
       configured: true,
-      updatedAt: raw.lastUpdateTime ? new Date(Number(raw.lastUpdateTime) * 1000).toISOString() : new Date().toISOString(),
+      updatedAt: raw.lastUpdateTime
+        ? new Date(Number(raw.lastUpdateTime) * 1000).toISOString()
+        : new Date().toISOString(),
       batteryPercent: soc,
       generationW: Number(raw.generationPower ?? 0),
       consumptionW: Number(raw.consumptionPower ?? 0),
       gridW: raw.gridPower == null ? null : Number(raw.gridPower),
       batteryW: batteryPower,
+      dischargeW,
       remainingHours,
       capacityKwh,
       reservePercent

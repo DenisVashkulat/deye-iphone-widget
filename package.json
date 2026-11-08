@@ -3,7 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "npx wrangler@latest dev",
-    "deploy": "npx wrangler@latest deploy"
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "preview": "wrangler dev"
+  },
+  "devDependencies": {
+    "wrangler": "^4.158.0"
   }
 }

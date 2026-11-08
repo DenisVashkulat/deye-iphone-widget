@@ -178,6 +178,19 @@ async function fetchDeviceAlerts(env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname === "/api/config-check") {
+      return json({
+        checks: {
+          DEYE_APP_ID: Boolean(env.DEYE_APP_ID),
+          DEYE_APP_SECRET: Boolean(env.DEYE_APP_SECRET),
+          DEYE_EMAIL: Boolean(env.DEYE_EMAIL),
+          DEYE_PASSWORD: Boolean(env.DEYE_PASSWORD),
+          DEYE_STATION_ID: Boolean(env.DEYE_STATION_ID),
+          DEYE_DEVICE_SN: Boolean(env.DEYE_DEVICE_SN)
+        },
+        note: "Only presence is reported; secret values are never returned."
+      });
+    }
     if (url.pathname === "/api/alerts") {
       if (request.method === "OPTIONS") return json({ ok: true });
       if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);

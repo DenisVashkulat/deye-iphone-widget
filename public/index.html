@@ -251,7 +251,7 @@ function renderHistory(data){
   const duration=last?last.duration:null;
   el("outage-duration").textContent="Тривалість останнього відключення: "+(duration==null?"немає даних":(last.on==null?"триває зараз · ":"")+fmtHours(duration/3600000));
   const recentPairs=[...pairs].reverse().slice(0,5);
-  el("outage-list").innerHTML=recentPairs.length?recentPairs.map(p=>'<div class="event"><span class="event-symbol" style="color:var(--red)">ϟ</span><div><strong>'+fmtDate(p.off,true)+'</strong><small>'+(p.on==null?"Електропостачання ще не відновлено":"Відновлено: "+fmtDate(p.on,true))+'</small></div><span class="event-duration">'+fmtHours(p.duration/3600000)+'</span></div>').join(""):'<div class="empty">Історія відключень начнёт собираться с момента обновления</div>';
+  el("outage-list").innerHTML=recentPairs.length?recentPairs.map(p=>'<div class="event"><span class="event-symbol" style="color:var(--red)">ϟ</span><div><strong>'+fmtDate(p.off,true)+'</strong><small>'+(p.on==null?"Електропостачання ще не відновлено":"Відновлено: "+fmtDate(p.on,true))+'</small></div><span class="event-duration">'+fmtHours(p.duration/3600000)+'</span></div>').join(""):'<div class="empty">Історія відключень накопичуватиметься від моменту оновлення</div>';
   el("event-list").innerHTML=renderEvents(events);
 }
 async function refreshStatus(){

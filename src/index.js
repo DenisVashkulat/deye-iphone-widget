@@ -139,6 +139,29 @@ async function getSnapshot(env) {
   return { ...(await fetchSnapshot(env)), cacheAgeSeconds: 0 };
 }
 
+async function fetchStationAlerts(env) {
+  const token = await getToken(env);
+  const now = Math.floor(Date.now() / 1000);
+  const startTimestamp = now - 30 * 24 * 60 * 60;
+  const stationId = Number(env.DEYE_STATION_ID);
+  const result = await deyeRequest(env, "station/alertList", token, {
+    stationId,
+    startTimestamp,
+    endTimestamp: now,
+    page: 1,
+    size: 200
+  });
+  const items = Array.isArray(result.stationAlertItems) ? result.stationAlertItems : [];
+  return {
+    ok: true,
+    stationId,
+    period: { startTimestamp, endTimestamp: now, days: 30 },
+    total: Number(result.total ?? items.length),
+    returned: items.length,
+    alerts: items
+  };
+}
+
 async function fetchDeviceAlerts(env) {
   const token = await getToken(env);
   const now = Math.floor(Date.now() / 1000);
@@ -190,6 +213,16 @@ export default {
         },
         note: "Only presence is reported; secret values are never returned."
       });
+    }
+    if (url.pathname === "/api/station-alerts") {
+      if (request.method === "OPTIONS") return json({ ok: true });
+      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+      try {
+        return json(await fetchStationAlerts(env));
+      } catch (error) {
+        console.error("Deye station alerts error:", error);
+        return json({ error: error.message || "Unknown server error" }, 500);
+      }
     }
     if (url.pathname === "/api/alerts") {
       if (request.method === "OPTIONS") return json({ ok: true });

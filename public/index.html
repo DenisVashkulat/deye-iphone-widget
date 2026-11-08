@@ -3,126 +3,291 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#101722">
-  <title>Deye Power</title>
+  <meta name="theme-color" content="#0a1020">
+  <title>Deye Monitor</title>
   <style>
+    :root{color-scheme:dark;--bg:#080e1b;--panel:#121d31;--panel2:#17243b;--line:#283956;--muted:#9aabc4;--text:#f3f7ff;--blue:#55a5ff;--green:#32df8c;--red:#ff686e;--yellow:#f5c85b}
     *{box-sizing:border-box}
-    body{margin:0;background:#101722;color:#f4f7fb;font:16px -apple-system,BlinkMacSystemFont,sans-serif;padding:28px 18px}
-    main{max-width:520px;margin:auto}
-    .muted{color:#9baabd}
-    .panel{background:#1b2736;border:1px solid #2c3a4c;border-radius:20px;padding:20px;margin:14px 0}
-    .soc{font-size:58px;font-weight:700;letter-spacing:-2px}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    .value{font-size:25px;font-weight:650;margin-top:8px}
-    .label{font-size:13px;color:#9baabd}
-    h1{font-size:26px;margin:0 0 6px}
-    .bar{height:9px;background:#334255;border-radius:9px;overflow:hidden;margin-top:12px}
-    .fill{height:100%;background:#57d69a;width:0}
-    #message{line-height:1.5}
-    .status{font-size:22px;font-weight:700;margin-top:8px}
-    .status.on{color:#57d69a}.status.off{color:#ff7777}.status.unknown{color:#f2c66d}
-    .last-light{font-size:21px;font-weight:650;margin-top:8px}
+    body{margin:0;background:radial-gradient(ellipse at 50% -15%,#172b4a 0,#0a1222 42%,var(--bg) 80%);color:var(--text);font:15px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:24px 18px 36px}
+    main{max-width:1240px;margin:0 auto}
+    .top{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:0 0 22px}
+    .brand{display:flex;align-items:center;gap:14px}.logo{width:54px;height:54px;border-radius:17px;background:linear-gradient(145deg,#173d73,#10243f);display:grid;place-items:center;color:#ffd452;font-size:29px;box-shadow:0 8px 30px #0005}
+    h1{font-size:clamp(24px,4vw,34px);margin:0;letter-spacing:-.8px}.subtitle{color:var(--muted);margin-top:4px}
+    .top-right{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end}.live{color:var(--green);font-weight:650}.updated{color:var(--muted);font-size:13px}
+    .pill{border:1px solid var(--line);border-radius:999px;padding:9px 13px;background:#111d31}
+    .grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin-bottom:16px}
+    .panel,.metric{background:linear-gradient(145deg,#17243a,#101a2c);border:1px solid var(--line);border-radius:19px;box-shadow:0 12px 30px #0002}
+    .metric{padding:17px 18px;min-height:132px;position:relative;overflow:hidden}
+    .metric-top{display:flex;align-items:center;gap:12px}.metric-icon{width:40px;height:40px;border-radius:13px;display:grid;place-items:center;font-size:22px;background:#203a5e;color:var(--blue)}
+    .metric-value{font-size:clamp(25px,3vw,34px);font-weight:750;letter-spacing:-1px;line-height:1.1}.metric-label{color:#b3c2d8;margin-top:6px;font-size:13px}
+    .bar{height:8px;border-radius:20px;background:#2b3a52;overflow:hidden;margin-top:13px}.bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,#18c978,#5aee9b);border-radius:20px;transition:width .5s}
+    .cols2{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:16px}
+    .panel{padding:18px;min-width:0}.panel-title{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:700;margin-bottom:16px}.panel-title .ico{font-size:21px;color:var(--blue)}
+    .grid-state{display:flex;align-items:center;gap:18px;min-height:130px}.state-mark{width:82px;height:82px;flex:none;border:7px solid var(--green);border-radius:50%;display:grid;place-items:center;color:var(--green);font-size:43px;box-shadow:0 0 24px #32df8c2b}
+    .state-mark.off{border-color:var(--red);color:var(--red);box-shadow:0 0 24px #ff686e24}.state-mark.unknown{border-color:var(--yellow);color:var(--yellow);font-size:32px}
+    .state-name{font-size:27px;font-weight:800;color:var(--green)}.state-name.off{color:var(--red)}.state-name.unknown{color:var(--yellow)}
+    .state-meta{color:#b8c6da;line-height:1.55;margin-top:5px}.state-details{border-top:1px solid var(--line);margin-top:12px;padding-top:12px;display:grid;gap:9px}
+    .detail-row{display:flex;align-items:flex-start;gap:9px;color:#c4d0e2;font-size:13px;line-height:1.4}.dot{width:10px;height:10px;border-radius:50%;margin-top:4px;flex:none}.dot.red{background:var(--red)}.dot.green{background:var(--green)}
+    .flow{display:grid;grid-template-columns:1fr 64px 1fr 64px 1fr;align-items:center;gap:4px;min-height:146px;text-align:center}
+    .flow-node{display:grid;justify-items:center;gap:7px}.flow-symbol{font-size:34px;color:var(--blue)}.flow-node strong{font-size:20px}.flow-node small{color:var(--muted)}.flow-center{width:61px;height:61px;border-radius:16px;background:#dbe7f6;color:#1266b5;display:grid;place-items:center;font-size:15px;font-weight:800;margin:auto;box-shadow:0 6px 24px #0005}
+    .arrow{color:var(--green);font-size:27px;text-align:center}.flow-extra{display:flex;justify-content:center;gap:32px;border-top:1px solid var(--line);padding-top:13px;margin-top:9px;flex-wrap:wrap}.flow-extra span{color:var(--muted);font-size:13px}.flow-extra b{color:var(--text);margin-left:5px}
+    .charts{margin-bottom:16px}.range{display:flex;gap:7px;margin:-3px 0 13px}.range button{border:1px solid var(--line);background:#101a2c;color:#c4d0e2;border-radius:999px;padding:8px 15px;cursor:pointer;font:inherit;font-size:13px}.range button.active{background:#247de0;border-color:#4297ff;color:white;box-shadow:0 4px 14px #247de055}
+    .chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.chart-box{min-width:0}.chart-title{font-weight:650;margin-bottom:7px}.chart-sub{font-size:12px;color:var(--muted);margin-top:5px}.chart-svg{width:100%;height:auto;display:block;overflow:visible}.legend{display:flex;gap:15px;flex-wrap:wrap;font-size:12px;color:#bbc9dc;margin:0 0 4px}.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}.blue{background:var(--blue)}.orange{background:#ffa23d}.green{background:var(--green)}
+    .stats3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 12px}.stat{text-align:center;padding:10px 6px;background:#101a2c;border:1px solid #263753;border-radius:13px}.stat strong{display:block;font-size:26px;color:#69baff}.stat span{color:var(--muted);font-size:12px}
+    .event-list{display:grid;gap:0}.event{display:grid;grid-template-columns:22px 1fr auto;align-items:start;gap:9px;padding:10px 0;border-top:1px solid #25344d}.event:first-child{border-top:0}.event-symbol{font-size:17px}.event strong{font-size:13px}.event small{display:block;color:var(--muted);margin-top:3px;line-height:1.35}.event-duration{color:#c4d0e2;font-size:12px;white-space:nowrap}
+    .empty{color:var(--muted);font-size:13px;padding:20px 4px;text-align:center}.muted{color:var(--muted)}.error{color:var(--red)}
+    .chart-empty{height:180px;display:grid;place-items:center;color:var(--muted);font-size:13px}
+    @media(max-width:850px){.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}.cols2{grid-template-columns:1fr}.chart-grid{grid-template-columns:1fr}.top{align-items:flex-start}.flow{max-width:650px;margin:auto}}
+    @media(max-width:520px){body{padding:15px 11px 28px}.top{display:block}.top-right{justify-content:flex-start;margin-top:12px}.logo{width:45px;height:45px}.metric{padding:14px;min-height:119px}.metric-icon{width:34px;height:34px}.grid4{gap:9px}.metric-value{font-size:27px}.panel{padding:15px;border-radius:16px}.panel-title{font-size:16px}.grid-state{gap:13px;min-height:112px}.state-mark{width:65px;height:65px;font-size:34px;border-width:6px}.state-name{font-size:23px}.flow{grid-template-columns:1fr 28px 1fr 28px 1fr;gap:0}.flow-symbol{font-size:27px}.flow-center{width:50px;height:50px;font-size:12px}.flow-node strong{font-size:16px}.flow-node small{font-size:11px}.arrow{font-size:19px}.flow-extra{gap:12px}.range button{padding:7px 12px}.stats3{gap:5px}.stat strong{font-size:22px}}
   </style>
 </head>
 <body><main>
-  <h1>Deye Power</h1><div class="muted">Мониторинг инвертора</div>
+  <header class="top">
+    <div class="brand"><div class="logo">ϟ</div><div><h1>Deye Monitor</h1><div class="subtitle">Домашний энергетический помощник</div></div></div>
+    <div class="top-right"><span class="live" id="live">● Подключение</span><span class="pill updated" id="updated">Обновляем данные…</span></div>
+  </header>
 
-  <section class="panel">
-    <div class="label">Состояние электросети</div>
-    <div class="status unknown" id="grid-status">● Проверяем…</div>
-    <div class="label" style="margin-top:9px">Последнее отключение</div>
-    <div class="last-light" id="last-off">Пока нет данных</div>
-    <div class="label" style="margin-top:12px">Последнее восстановление</div>
-    <div class="last-light" id="last-on">Пока нет данных</div>
+  <section class="grid4">
+    <article class="metric"><div class="metric-top"><div class="metric-icon">▣</div><div><div class="metric-value" id="soc">—%</div><div class="metric-label">Заряд батареи</div></div></div><div class="bar"><i id="socbar"></i></div></article>
+    <article class="metric"><div class="metric-top"><div class="metric-icon">ϟ</div><div><div class="metric-value" id="load">— Вт</div><div class="metric-label">Потребление дома</div></div></div><div class="chart-sub" id="load-note">Текущая нагрузка</div></article>
+    <article class="metric"><div class="metric-top"><div class="metric-icon">◷</div><div><div class="metric-value" id="runtime">—</div><div class="metric-label">Остаток работы</div></div></div><div class="chart-sub">При текущем разряде</div></article>
+    <article class="metric"><div class="metric-top"><div class="metric-icon">⚡</div><div><div class="metric-value" id="charge-time">—</div><div class="metric-label">До полного заряда</div></div></div><div class="chart-sub" id="charge-note">Прогноз приблизительный</div></article>
   </section>
 
-  <section class="panel">
-    <div class="label">Заряд аккумулятора</div>
-    <div class="soc" id="soc">—%</div>
-    <div class="bar"><div class="fill" id="fill"></div></div>
-    <div class="muted" id="runtime">Остаток времени: —</div>
+  <section class="cols2">
+    <article class="panel">
+      <div class="panel-title"><span class="ico">ϟ</span> Состояние электросети</div>
+      <div class="grid-state"><div class="state-mark unknown" id="state-mark">…</div><div><div class="state-name unknown" id="grid-status">Проверяем…</div><div class="state-meta" id="grid-meta">Получаем состояние сети</div></div></div>
+      <div class="state-details">
+        <div class="detail-row"><i class="dot red"></i><span>Последнее отключение: <b id="last-off">—</b></span></div>
+        <div class="detail-row"><i class="dot green"></i><span>Последнее включение: <b id="last-on">—</b></span></div>
+        <div class="detail-row"><i class="dot"></i><span>Напряжение / частота: <b id="grid-quality">—</b></span></div>
+      </div>
+    </article>
+    <article class="panel">
+      <div class="panel-title"><span class="ico">⌘</span> Поток энергии</div>
+      <div class="flow">
+        <div class="flow-node"><div class="flow-symbol">▣</div><strong id="battery-flow">— Вт</strong><small>Батарея</small></div>
+        <div class="arrow">→</div>
+        <div class="flow-node"><div class="flow-center">Deye</div><strong id="generation-flow">— Вт</strong><small>Генерация</small></div>
+        <div class="arrow">→</div>
+        <div class="flow-node"><div class="flow-symbol">⌂</div><strong id="consumption-flow">— Вт</strong><small>Дом</small></div>
+      </div>
+      <div class="flow-extra"><span>Сеть <b id="grid-flow">— Вт</b></span><span>Заряд <b id="charge-flow">— Вт</b></span><span>Разряд <b id="discharge-flow">— Вт</b></span></div>
+    </article>
   </section>
 
-  <div class="grid">
-    <section class="panel"><div class="label">Нагрузка</div><div class="value" id="load">— W</div></section>
-    <section class="panel"><div class="label">До полного заряда</div><div class="value" id="charge-time">—</div></section>
-    <section class="panel"><div class="label">Мощность сети</div><div class="value" id="grid-power">— W</div></section>
-    <section class="panel"><div class="label">Аккумулятор</div><div class="value" id="battery">— W</div></section>
-  </div>
-  <section class="panel"><div id="message" class="muted">Загружаем данные…</div></section>
+  <section class="panel charts">
+    <div class="panel-title"><span class="ico">▥</span> Графики и статистика</div>
+    <div class="range" role="group" aria-label="Период графика">
+      <button class="active" data-range="24h">24 часа</button><button data-range="7d">7 дней</button><button data-range="30d">30 дней</button>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-box"><div class="chart-title">Заряд батареи</div><div id="soc-chart" class="chart-empty">Загружаем историю…</div><div class="chart-sub" id="soc-chart-note">Сохранённые минутные показания</div></div>
+      <div class="chart-box"><div class="chart-title">Мощность и потребление</div><div class="legend"><span><i class="blue"></i>Потребление</span><span><i class="orange"></i>Генерация</span></div><div id="power-chart" class="chart-empty">Загружаем историю…</div><div class="chart-sub" id="power-chart-note">Энергия за период: —</div></div>
+    </div>
+  </section>
+
+  <section class="cols2">
+    <article class="panel">
+      <div class="panel-title"><span class="ico">▦</span> История отключений</div>
+      <div class="stats3"><div class="stat"><strong id="outages-today">—</strong><span>сегодня</span></div><div class="stat"><strong id="outages-week">—</strong><span>за 7 дней</span></div><div class="stat"><strong id="outages-month">—</strong><span>за 30 дней</span></div></div>
+      <div class="muted" id="outage-duration" style="font-size:13px;margin-bottom:8px">Продолжительность последнего отключения: —</div>
+      <div class="event-list" id="outage-list"><div class="empty">История пока собирается</div></div>
+    </article>
+    <article class="panel">
+      <div class="panel-title"><span class="ico">♧</span> Последние события</div>
+      <div class="event-list" id="event-list"><div class="empty">Событий пока нет</div></div>
+    </article>
+  </section>
 </main>
 <script>
-const el=id=>document.getElementById(id);
-function hours(v){
-  if(v==null||!Number.isFinite(v))return "не рассчитывается";
-  const h=Math.floor(v),m=Math.round((v-h)*60);
-  return h+" ч "+m+" мин";
-}
-function dateTime(value){
-  if(value==null||!Number.isFinite(Number(value)))return "Пока нет данных";
-  const date=new Date(Number(value));
-  if(Number.isNaN(date.getTime()))return "Пока нет данных";
-  return date.toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
-}
-
+const el = id => document.getElementById(id);
+let latestStatus = null;
+let currentRange = "24h";
 let runtimeBaseHours = null;
 let runtimeBaseAt = null;
+let historyData = {samples:[],events:[]};
+
+function fmtHours(value){
+  if(value == null || !Number.isFinite(Number(value))) return "—";
+  const mins = Math.max(0, Math.round(Number(value) * 60));
+  return Math.floor(mins / 60) + " ч " + (mins % 60) + " мин";
+}
+function fmtDate(value, includeYear){
+  if(value == null || !Number.isFinite(Number(value))) return "нет данных";
+  const d = new Date(Number(value));
+  if(Number.isNaN(d.getTime())) return "нет данных";
+  return d.toLocaleString("ru-RU", includeYear
+    ? {day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}
+    : {day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
+}
+function fmtTime(value){
+  return new Date(Number(value)).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"});
+}
 function updateRuntime(){
-  if(runtimeBaseHours==null || runtimeBaseAt==null){
-    el("runtime").textContent="Остаток времени: не рассчитывается";
-    return;
-  }
-  const elapsedHours = Math.max(0, (Date.now() - runtimeBaseAt) / 3600000);
-  const remaining = Math.max(0, runtimeBaseHours - elapsedHours);
-  el("runtime").textContent="Остаток времени: "+hours(remaining);
+  if(runtimeBaseHours == null || runtimeBaseAt == null){el("runtime").textContent="—";return;}
+  const hours = Math.max(0, runtimeBaseHours - Math.max(0,(Date.now()-runtimeBaseAt)/3600000));
+  el("runtime").textContent=fmtHours(hours);
 }
-async function refresh(){
+function setStatus(d){
+  latestStatus=d;
+  const percent=Math.max(0,Math.min(100,Number(d.batteryPercent)||0));
+  el("soc").textContent=Math.round(percent)+"%";
+  el("socbar").style.width=percent+"%";
+  el("load").textContent=Math.round(Number(d.consumptionW)||0)+" Вт";
+  el("load-note").textContent="Обновление показаний от DeyeCloud";
+  runtimeBaseHours=d.remainingHours==null?null:Number(d.remainingHours);
+  runtimeBaseAt=Number(d.cacheFetchedAt||Date.now());
+  updateRuntime();
+
+  const chargeW=Number(d.chargeW)||0;
+  const chargeHours=Number(d.chargeHours);
+  if(percent>=99.5){el("charge-time").textContent="Заряжен";el("charge-note").textContent="Батарея почти полная";}
+  else if(d.gridPresent!==true){el("charge-time").textContent="Нет света";el("charge-note").textContent="Зарядка от сети недоступна";}
+  else if(chargeW>30&&Number.isFinite(chargeHours)){el("charge-time").textContent=fmtHours(chargeHours);el("charge-note").textContent="При текущей мощности зарядки";}
+  else{el("charge-time").textContent="Ожидание";el("charge-note").textContent="Нет активной зарядки";}
+
+  const mark=el("state-mark"),name=el("grid-status");
+  if(d.gridPresent===true){mark.className="state-mark";mark.textContent="✓";name.className="state-name";name.textContent="Свет есть";}
+  else if(d.gridPresent===false){mark.className="state-mark off";mark.textContent="×";name.className="state-name off";name.textContent="Света нет";}
+  else{mark.className="state-mark unknown";mark.textContent="?";name.className="state-name unknown";name.textContent="Нет данных";}
+  const age=Number(d.cacheAgeSeconds);
+  el("grid-meta").textContent=(d.gridPresent===true?"Электроснабжение восстановлено":"Состояние сети по данным инвертора")+
+    (Number.isFinite(age)?" · снимок "+(age<60?age+" сек. назад":Math.floor(age/60)+" мин. назад"):"");
+  el("last-off").textContent=fmtDate(d.lastGridOffAt,true);
+  el("last-on").textContent=fmtDate(d.lastGridOnAt||d.lastGridPowerAt,true);
+  const voltage=d.gridVoltageV==null?"—":Math.round(Number(d.gridVoltageV))+" В";
+  const frequency=d.gridFrequencyHz==null?"—":Number(d.gridFrequencyHz).toFixed(1)+" Гц";
+  el("grid-quality").textContent=voltage+" / "+frequency;
+
+  el("battery-flow").textContent=Math.round(Math.abs(Number(d.batteryW)||0))+" Вт";
+  el("generation-flow").textContent=Math.round(Number(d.generationW)||0)+" Вт";
+  el("consumption-flow").textContent=Math.round(Number(d.consumptionW)||0)+" Вт";
+  el("grid-flow").textContent=d.gridW==null?"нет данных":Math.round(Number(d.gridW))+" Вт";
+  el("charge-flow").textContent=Math.round(Number(d.chargeW)||0)+" Вт";
+  el("discharge-flow").textContent=Math.round(Number(d.dischargeW)||0)+" Вт";
+
+  const fetched=Number(d.cacheFetchedAt||Date.now());
+  el("updated").textContent="Обновлено: "+fmtTime(fetched);
+  el("live").textContent="● Данные получены";
+  el("live").style.color="var(--green)";
+}
+function downsample(points,maxPoints){
+  if(points.length<=maxPoints)return points;
+  const out=[];
+  for(let i=0;i<maxPoints;i++)out.push(points[Math.round(i*(points.length-1)/(maxPoints-1))]);
+  return out;
+}
+function makeLineChart(points,key,maxValue,color,area){
+  if(!points.length)return '<div class="chart-empty">Пока недостаточно истории — данные начнут накапливаться автоматически</div>';
+  const data=downsample(points,180),left=43,right=615,top=13,bottom=174,w=right-left,h=bottom-top;
+  const vals=data.map(p=>Math.max(0,Number(p[key])||0));
+  const max=Math.max(maxValue||0,...vals,1);
+  const coords=vals.map((v,i)=>[left+(data.length===1?w/2:i*w/(data.length-1)),bottom-(v/max)*h]);
+  const path=coords.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+","+p[1].toFixed(1)).join(" ");
+  const areaPath=path+" L"+right+","+bottom+" L"+left+","+bottom+" Z";
+  let grid="";
+  for(let i=0;i<=4;i++){const y=top+i*h/4;grid+='<line x1="'+left+'" y1="'+y+'" x2="'+right+'" y2="'+y+'" stroke="#293a55" stroke-width="1"/><text x="35" y="'+(y+4)+'" text-anchor="end" fill="#91a4bf" font-size="11">'+Math.round(max*(1-i/4))+'</text>';}
+  const start=fmtTime(data[0].sampled_at),end=fmtTime(data[data.length-1].sampled_at);
+  return '<svg class="chart-svg" viewBox="0 0 640 210" role="img"><defs><linearGradient id="fill-'+key+'" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="'+color+'" stop-opacity=".35"/><stop offset="100%" stop-color="'+color+'" stop-opacity="0"/></linearGradient></defs>'+grid+
+    (area?'<path d="'+areaPath+'" fill="url(#fill-'+key+')"/>':'')+
+    '<path d="'+path+'" fill="none" stroke="'+color+'" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>'+
+    '<text x="'+left+'" y="201" fill="#91a4bf" font-size="11">'+start+'</text><text x="'+right+'" y="201" text-anchor="end" fill="#91a4bf" font-size="11">'+end+'</text></svg>';
+}
+function renderPowerChart(points){
+  if(!points.length)return '<div class="chart-empty">История начнёт собираться автоматически</div>';
+  const data=downsample(points,180),left=43,right=615,top=13,bottom=174,w=right-left,h=bottom-top;
+  const max=Math.max(100,...data.map(p=>Math.max(Number(p.consumption_w)||0,Number(p.generation_w)||0)));
+  const makePath=key=>data.map((p,i)=>{const x=left+(data.length===1?w/2:i*w/(data.length-1));const y=bottom-(Math.max(0,Number(p[key])||0)/max)*h;return (i?"L":"M")+x.toFixed(1)+","+y.toFixed(1)}).join(" ");
+  let grid="";
+  for(let i=0;i<=4;i++){const y=top+i*h/4;grid+='<line x1="'+left+'" y1="'+y+'" x2="'+right+'" y2="'+y+'" stroke="#293a55" stroke-width="1"/><text x="35" y="'+(y+4)+'" text-anchor="end" fill="#91a4bf" font-size="11">'+Math.round(max*(1-i/4))+'</text>';}
+  return '<svg class="chart-svg" viewBox="0 0 640 210">'+grid+'<path d="'+makePath("consumption_w")+'" fill="none" stroke="#55a5ff" stroke-width="3" stroke-linejoin="round"/><path d="'+makePath("generation_w")+'" fill="none" stroke="#ffa23d" stroke-width="2.5" stroke-linejoin="round"/><text x="'+left+'" y="201" fill="#91a4bf" font-size="11">'+fmtTime(data[0].sampled_at)+'</text><text x="'+right+'" y="201" text-anchor="end" fill="#91a4bf" font-size="11">'+fmtTime(data[data.length-1].sampled_at)+'</text></svg>';
+}
+function outagePairs(events){
+  const ordered=[...events].sort((a,b)=>Number(a.occurred_at)-Number(b.occurred_at));
+  const pairs=[];let off=null;
+  for(const e of ordered){
+    if(e.event_type==="grid_off")off=Number(e.occurred_at);
+    else if(e.event_type==="grid_on"&&off!=null){pairs.push({off,on:Number(e.occurred_at),duration:Number(e.occurred_at)-off});off=null;}
+  }
+  if(off!=null)pairs.push({off,on:null,duration:Date.now()-off});
+  return pairs;
+}
+function renderEvents(events){
+  const recent=[...events].sort((a,b)=>Number(b.occurred_at)-Number(a.occurred_at)).slice(0,8);
+  if(!recent.length)return '<div class="empty">Пока нет зафиксированных переключений сети. История будет пополняться автоматически.</div>';
+  return recent.map(e=>{
+    const on=e.event_type==="grid_on";
+    return '<div class="event"><span class="event-symbol" style="color:'+(on?"var(--green)":"var(--red)")+'">'+(on?"●":"ϟ")+'</span><div><strong>'+(on?"Электроснабжение восстановлено":"Электроэнергия отключена")+'</strong><small>'+fmtDate(e.occurred_at,true)+'</small></div><span class="event-duration">'+fmtTime(e.occurred_at)+'</span></div>';
+  }).join("");
+}
+function renderHistory(data){
+  historyData=data;
+  const samples=data.samples||[],events=data.events||[];
+  el("soc-chart").className="";
+  el("power-chart").className="";
+  el("soc-chart").innerHTML=makeLineChart(samples,"battery_percent",100,"#32df8c",true);
+  el("power-chart").innerHTML=renderPowerChart(samples);
+  if(samples.length){
+    const energy=samples.slice(1).reduce((sum,p,i)=>{
+      const prev=samples[i],hours=Math.max(0,Math.min(1,(Number(p.sampled_at)-Number(prev.sampled_at))/3600000));
+      return sum+((Number(prev.consumption_w)||0)+(Number(p.consumption_w)||0))/2*hours/1000;
+    },0);
+    const avg=samples.reduce((s,p)=>s+(Number(p.consumption_w)||0),0)/samples.length;
+    const peak=Math.max(...samples.map(p=>Number(p.consumption_w)||0));
+    el("power-chart-note").textContent="Расход за период ≈ "+energy.toFixed(2)+" кВт·ч · средняя нагрузка "+Math.round(avg)+" Вт · пик "+Math.round(peak)+" Вт";
+    el("soc-chart-note").textContent="Последнее сохранённое значение: "+Math.round(Number(samples[samples.length-1].battery_percent)||0)+"% · точек: "+samples.length;
+  }else{
+    el("power-chart-note").textContent="Энергия за период: пока недостаточно данных";
+    el("soc-chart-note").textContent="Данные начнут накапливаться автоматически";
+  }
+  const pairs=outagePairs(events),now=Date.now();
+  const todayStart=new Date();todayStart.setHours(0,0,0,0);
+  el("outages-today").textContent=pairs.filter(p=>p.off>=todayStart.getTime()).length;
+  el("outages-week").textContent=pairs.filter(p=>p.off>=now-7*86400000).length;
+  el("outages-month").textContent=pairs.filter(p=>p.off>=now-30*86400000).length;
+  const last=pairs[pairs.length-1];
+  const duration=last?last.duration:null;
+  el("outage-duration").textContent="Продолжительность последнего отключения: "+(duration==null?"нет данных":(last.on==null?"идёт сейчас · ":"")+fmtHours(duration/3600000));
+  const recentPairs=[...pairs].reverse().slice(0,5);
+  el("outage-list").innerHTML=recentPairs.length?recentPairs.map(p=>'<div class="event"><span class="event-symbol" style="color:var(--red)">ϟ</span><div><strong>'+fmtDate(p.off,true)+'</strong><small>'+(p.on==null?"Света пока нет":"Восстановлено: "+fmtDate(p.on,true))+'</small></div><span class="event-duration">'+fmtHours(p.duration/3600000)+'</span></div>').join(""):'<div class="empty">История отключений начнёт собираться с момента обновления</div>';
+  el("event-list").innerHTML=renderEvents(events);
+}
+async function refreshStatus(){
   try{
-    const r=await fetch("/api/status",{cache:"no-store"});
-    const d=await r.json();
-    if(!r.ok)throw Error(d.error||"Ошибка API");
-    if(!d.configured){el("message").textContent=d.message||"Сервер не настроен";return;}
-
-    const status=el("grid-status");
-    if(d.gridPresent===true){
-      status.textContent="● СВЕТ ЕСТЬ";
-      status.className="status on";
-    }else if(d.gridPresent===false){
-      status.textContent="● СВЕТА НЕТ";
-      status.className="status off";
-    }else{
-      status.textContent="● СТАТУС НЕИЗВЕСТЕН";
-      status.className="status unknown";
-    }
-    el("last-off").textContent=dateTime(d.lastGridOffAt);
-    el("last-on").textContent=dateTime(d.lastGridOnAt || d.lastGridPowerAt);
-
-    const percent=Math.max(0,Math.min(100,Number(d.batteryPercent)||0));
-    el("soc").textContent=Math.round(percent)+"%";
-    el("fill").style.width=percent+"%";
-    runtimeBaseHours = d.remainingHours==null ? null : Number(d.remainingHours);
-    runtimeBaseAt = Number(d.cacheFetchedAt || Date.now());
-    updateRuntime();
-    el("load").textContent=Math.round(Number(d.consumptionW)||0)+" W";
-    const chargeW = Number(d.chargeW) || 0;
-    const chargeHours = Number(d.chargeHours);
-    if(percent >= 99.5){
-      el("charge-time").textContent="Заряжен";
-    }else if(d.gridPresent !== true){
-      el("charge-time").textContent="Света нет";
-    }else if(chargeW > 30 && Number.isFinite(chargeHours)){
-      el("charge-time").textContent=hours(chargeHours);
-    }else{
-      el("charge-time").textContent="Ожидание зарядки";
-    }
-    el("grid-power").textContent=d.gridW==null?"Нет данных":Math.round(Number(d.gridW))+" W";
-    el("battery").textContent=Math.round(Number(d.batteryW)||0)+" W";
-    el("message").textContent="Получено сервером: "+new Date(d.cacheFetchedAt||Date.now()).toLocaleString("ru-RU");
-  }catch(e){
-    el("message").textContent="Ошибка обновления: "+e.message;
+    const response=await fetch("/api/status",{cache:"no-store"});
+    const data=await response.json();
+    if(!response.ok)throw new Error(data.error||"Ошибка API");
+    if(!data.configured)throw new Error(data.message||"Сервер не настроен");
+    setStatus(data);
+  }catch(error){
+    el("live").textContent="● Нет связи";
+    el("live").style.color="var(--red)";
+    el("updated").textContent=error.message;
   }
 }
-refresh();
-setInterval(refresh,5000);
+async function refreshHistory(range){
+  try{
+    const response=await fetch("/api/history?range="+encodeURIComponent(range),{cache:"no-store"});
+    const data=await response.json();
+    if(!response.ok)throw new Error(data.error||"Ошибка истории");
+    renderHistory(data);
+  }catch(error){
+    el("soc-chart").innerHTML='<div class="chart-empty error">Не удалось загрузить график: '+String(error.message).replace(/[<>]/g,"")+'</div>';
+    el("power-chart").innerHTML='<div class="chart-empty error">Не удалось загрузить график</div>';
+  }
+}
+document.querySelectorAll("[data-range]").forEach(button=>{
+  button.addEventListener("click",()=>{
+    if(currentRange===button.dataset.range)return;
+    currentRange=button.dataset.range;
+    document.querySelectorAll("[data-range]").forEach(b=>b.classList.toggle("active",b===button));
+    refreshHistory(currentRange);
+  });
+});
+refreshStatus();
+refreshHistory(currentRange);
+setInterval(refreshStatus,15000);
 setInterval(updateRuntime,1000);
 </script></body></html>

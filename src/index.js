@@ -146,12 +146,17 @@ async function fetchSnapshot(env) {
   await env.DEYE_DB.prepare(
     "CREATE TABLE IF NOT EXISTS discharge_samples (sampled_at INTEGER PRIMARY KEY, discharge_w REAL NOT NULL)"
   ).run();
-  await env.DEYE_DB.prepare(
-    "INSERT OR REPLACE INTO discharge_samples (sampled_at, discharge_w) VALUES (?1, ?2)"
-  ).bind(fetchedAt, dischargeW).run();
-  await env.DEYE_DB.prepare(
-    "DELETE FROM discharge_samples WHERE sampled_at < ?1"
-  ).bind(fetchedAt - 60 * 60 * 1000).run();
+  if (gridPresent) {
+    // Start a fresh averaging window after the next outage; don't mix grid-on time into runtime.
+    await env.DEYE_DB.prepare("DELETE FROM discharge_samples").run();
+  } else {
+    await env.DEYE_DB.prepare(
+      "INSERT OR REPLACE INTO discharge_samples (sampled_at, discharge_w) VALUES (?1, ?2)"
+    ).bind(fetchedAt, dischargeW).run();
+    await env.DEYE_DB.prepare(
+      "DELETE FROM discharge_samples WHERE sampled_at < ?1"
+    ).bind(fetchedAt - 60 * 60 * 1000).run();
+  }
 
   const dischargeStats = await env.DEYE_DB.prepare(
     "SELECT AVG(discharge_w) AS average_w, COUNT(*) AS sample_count, " +

@@ -57,8 +57,8 @@ try {
     const hours = Number(data.remainingHours);
     const runtimeText = data.remainingHours == null || !Number.isFinite(hours)
       ? "Залишок: —"
-      : "Залишок: " + Math.floor(hours) + " ч " +
-        Math.round((hours % 1) * 60) + " мин";
+      : "Залишок: " + Math.floor(hours) + " год " +
+        Math.round((hours % 1) * 60) + " хв";
 
     const runtime = w.addText(runtimeText);
     runtime.font = Font.semiboldSystemFont(14);
@@ -84,7 +84,7 @@ try {
     const chargeText = percent >= 99.5 ? "Заряджено" :
       data.gridPresent !== true ? "Немає електроенергії" :
       chargeW > 30 && Number.isFinite(chargeHours)
-        ? Math.floor(chargeHours) + " ч " + Math.round((chargeHours % 1) * 60) + " мин"
+        ? Math.floor(chargeHours) + " год " + Math.round((chargeHours % 1) * 60) + " хв"
         : "Очікування заряджання";
     row("До повного заряду", chargeText);
     w.addSpacer(5);

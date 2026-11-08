@@ -80,11 +80,11 @@
   <section class="panel charts">
     <div class="panel-title"><span class="ico">▥</span> Графіки та статистика</div>
     <div class="range" role="group" aria-label="Період графіка">
-      <button class="active" data-range="24h">24 години</button><button data-range="7d">7 днів</button><button data-range="30d">30 дней</button>
+      <button class="active" data-range="24h">24 години</button><button data-range="7d">7 днів</button><button data-range="30d">30 днів</button>
     </div>
     <div class="chart-grid">
-      <div class="chart-box"><div class="chart-title">Заряд акумулятора</div><div id="soc-chart" class="chart-empty">Загружаем историю…</div><div class="chart-sub" id="soc-chart-note">Сохранённые минутные показания</div></div>
-      <div class="chart-box"><div class="chart-title">Потужність і споживання</div><div class="legend"><span><i class="blue"></i>Споживання</span><span><i class="orange"></i>Генерація</span></div><div id="power-chart" class="chart-empty">Загружаем историю…</div><div class="chart-sub" id="power-chart-note">Энергия за период: —</div></div>
+      <div class="chart-box"><div class="chart-title">Заряд акумулятора</div><div id="soc-chart" class="chart-empty">Завантажуємо історію…</div><div class="chart-sub" id="soc-chart-note">Збережені щохвилинні показники</div></div>
+      <div class="chart-box"><div class="chart-title">Потужність і споживання</div><div class="legend"><span><i class="blue"></i>Споживання</span><span><i class="orange"></i>Генерація</span></div><div id="power-chart" class="chart-empty">Завантажуємо історію…</div><div class="chart-sub" id="power-chart-note">Енергія за період: —</div></div>
     </div>
   </section>
 
@@ -112,7 +112,7 @@ let historyData = {samples:[],events:[]};
 function fmtHours(value){
   if(value == null || !Number.isFinite(Number(value))) return "—";
   const mins = Math.max(0, Math.round(Number(value) * 60));
-  return Math.floor(mins / 60) + " ч " + (mins % 60) + " мин";
+  return Math.floor(mins / 60) + " год " + (mins % 60) + " хв";
 }
 function fmtDate(value, includeYear){
   if(value == null || !Number.isFinite(Number(value))) return "немає даних";
@@ -143,8 +143,8 @@ function setStatus(d){
 
   const chargeW=Number(d.chargeW)||0;
   const chargeHours=Number(d.chargeHours);
-  if(percent>=99.5){el("charge-time").textContent="Заряджено";el("charge-note").textContent="Акумулятор почти полная";}
-  else if(d.gridPresent!==true){el("charge-time").textContent="Немає електроенергії";el("charge-note").textContent="Заряджанняка от сети недоступна";}
+  if(percent>=99.5){el("charge-time").textContent="Заряджено";el("charge-note").textContent="Акумулятор майже повністю заряджений";}
+  else if(d.gridPresent!==true){el("charge-time").textContent="Немає електроенергії";el("charge-note").textContent="Заряджання від мережі недоступне";}
   else if(chargeW>30&&Number.isFinite(chargeHours)){el("charge-time").textContent=fmtHours(chargeHours);el("charge-note").textContent="За поточної потужності заряджання";}
   else{el("charge-time").textContent="Очікування";el("charge-note").textContent="Немає активного заряджання";}
 
@@ -219,7 +219,7 @@ function renderEvents(events){
   if(!recent.length)return '<div class="empty">Поки не зафіксовано перемикань електромережі. Історія поповнюватиметься автоматично.</div>';
   return recent.map(e=>{
     const on=e.event_type==="grid_on";
-    return '<div class="event"><span class="event-symbol" style="color:'+(on?"var(--green)":"var(--red)")+'">'+(on?"●":"ϟ")+'</span><div><strong>'+(on?"Електропостачання відновлено":"Электроэнергия отключена")+'</strong><small>'+fmtDate(e.occurred_at,true)+'</small></div><span class="event-duration">'+fmtTime(e.occurred_at)+'</span></div>';
+    return '<div class="event"><span class="event-symbol" style="color:'+(on?"var(--green)":"var(--red)")+'">'+(on?"●":"ϟ")+'</span><div><strong>'+(on?"Електропостачання відновлено":"Електропостачання зникло")+'</strong><small>'+fmtDate(e.occurred_at,true)+'</small></div><span class="event-duration">'+fmtTime(e.occurred_at)+'</span></div>';
   }).join("");
 }
 function renderHistory(data){
@@ -236,7 +236,7 @@ function renderHistory(data){
     },0);
     const avg=samples.reduce((s,p)=>s+(Number(p.consumption_w)||0),0)/samples.length;
     const peak=Math.max(...samples.map(p=>Number(p.consumption_w)||0));
-    el("power-chart-note").textContent="Спожито за період ≈ "+energy.toFixed(2)+" кВт·ч · середнє навантаження "+Math.round(avg)+" Вт · пікова потужність "+Math.round(peak)+" Вт";
+    el("power-chart-note").textContent="Спожито за період ≈ "+energy.toFixed(2)+" кВт·год · середнє навантаження "+Math.round(avg)+" Вт · пікова потужність "+Math.round(peak)+" Вт";
     el("soc-chart-note").textContent="Останнє збережене значення: "+Math.round(Number(samples[samples.length-1].battery_percent)||0)+"% · точок: "+samples.length;
   }else{
     el("power-chart-note").textContent="Споживання за період: поки недостатньо даних";
@@ -259,10 +259,10 @@ async function refreshStatus(){
     const response=await fetch("/api/status",{cache:"no-store"});
     const data=await response.json();
     if(!response.ok)throw new Error("Не вдалося отримати показники з DeyeCloud");
-    if(!data.configured)throw new Error(data.message||"Сервер не настроен");
+    if(!data.configured)throw new Error(data.message||"Сервер не налаштовано");
     setStatus(data);
   }catch(error){
-    el("live").textContent="● Нет связи";
+    el("live").textContent="● Немає зв’язку";
     el("live").style.color="var(--red)";
     el("updated").textContent=error.message;
   }

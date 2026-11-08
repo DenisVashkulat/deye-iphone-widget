@@ -170,7 +170,7 @@ async function fetchSnapshot(env) {
     Number(dischargeStats?.first_sample_at ?? 0);
   const hasReliableAverage = sampleCount >= 5 && sampleSpanMs >= 4 * 60 * 1000;
   const effectiveDischargeW = hasReliableAverage ? averageDischargeW : dischargeW;
-  const remainingHours = effectiveDischargeW > 30
+  const remainingHours = dischargeW > 30 && effectiveDischargeW > 30
     ? usableKwh * 1000 / effectiveDischargeW
     : null;
   const chargeHours = chargeW > 30 && soc < 100

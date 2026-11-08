@@ -92,7 +92,8 @@ async function fetchGridHistory(env, token) {
       gridPresent: Number.isFinite(voltage) && voltage >= 180 &&
         Number.isFinite(frequency) && frequency >= 45 && frequency <= 55
     };
-  }).filter(point => Number.isFinite(point.time)).sort((a, b) => a.time - b.time);
+  }).filter(point => Number.isFinite(point.time) && Number.isFinite(point.gridPresent === true ? 1 : 0))
+    .sort((a, b) => a.time - b.time);
 }
 
 function getGridTransitions(points, previous) {
@@ -109,6 +110,86 @@ function getGridTransitions(points, previous) {
   }
 
   return { lastGridOffAt, lastGridOnAt };
+}
+
+
+async function ensureAnalyticsTables(env) {
+  await env.DEYE_DB.prepare(
+    "CREATE TABLE IF NOT EXISTS battery_samples (" +
+    "sampled_at INTEGER PRIMARY KEY, battery_percent REAL NOT NULL, " +
+    "consumption_w REAL, generation_w REAL, grid_w REAL, battery_w REAL, " +
+    "grid_present INTEGER NOT NULL, charge_w REAL, discharge_w REAL)"
+  ).run();
+  await env.DEYE_DB.prepare(
+    "CREATE TABLE IF NOT EXISTS grid_events (" +
+    "id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL, " +
+    "occurred_at INTEGER NOT NULL, UNIQUE(event_type, occurred_at))"
+  ).run();
+  await env.DEYE_DB.prepare(
+    "CREATE INDEX IF NOT EXISTS idx_grid_events_time ON grid_events(occurred_at)"
+  ).run();
+}
+
+async function saveAnalyticsSample(env, snapshot, gridHistory) {
+  await ensureAnalyticsTables(env);
+  const sampledAt = Math.floor(Number(snapshot.cacheFetchedAt) / 60000) * 60000;
+  await env.DEYE_DB.prepare(
+    "INSERT OR REPLACE INTO battery_samples " +
+    "(sampled_at, battery_percent, consumption_w, generation_w, grid_w, battery_w, grid_present, charge_w, discharge_w) " +
+    "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)"
+  ).bind(
+    sampledAt,
+    Number(snapshot.batteryPercent) || 0,
+    Number(snapshot.consumptionW) || 0,
+    Number(snapshot.generationW) || 0,
+    snapshot.gridW == null ? null : Number(snapshot.gridW),
+    Number(snapshot.batteryW) || 0,
+    snapshot.gridPresent === true ? 1 : 0,
+    Number(snapshot.chargeW) || 0,
+    Number(snapshot.dischargeW) || 0
+  ).run();
+
+  const ordered = [...(gridHistory || [])].sort((a, b) => a.time - b.time);
+  for (let i = 1; i < ordered.length; i++) {
+    if (ordered[i].gridPresent === ordered[i - 1].gridPresent) continue;
+    const eventType = ordered[i].gridPresent ? "grid_on" : "grid_off";
+    await env.DEYE_DB.prepare(
+      "INSERT OR IGNORE INTO grid_events (event_type, occurred_at) VALUES (?1, ?2)"
+    ).bind(eventType, Math.floor(Number(ordered[i].time))).run();
+  }
+
+  // Keep 30 days of chart history and outage events. Prune once per hour.
+  if (new Date(Number(snapshot.cacheFetchedAt)).getMinutes() === 0) {
+    const cutoff = Number(snapshot.cacheFetchedAt) - 30 * 24 * 60 * 60 * 1000;
+    await env.DEYE_DB.prepare("DELETE FROM battery_samples WHERE sampled_at < ?1").bind(cutoff).run();
+    await env.DEYE_DB.prepare("DELETE FROM grid_events WHERE occurred_at < ?1").bind(cutoff).run();
+  }
+}
+
+async function fetchAnalytics(env, requestedRange) {
+  await ensureAnalyticsTables(env);
+  const ranges = { "24h": 24 * 60 * 60 * 1000, "7d": 7 * 24 * 60 * 60 * 1000, "30d": 30 * 24 * 60 * 60 * 1000 };
+  const range = Object.prototype.hasOwnProperty.call(ranges, requestedRange) ? requestedRange : "24h";
+  const now = Date.now();
+  const from = now - ranges[range];
+  const [sampleResult, eventResult] = await Promise.all([
+    env.DEYE_DB.prepare(
+      "SELECT sampled_at, battery_percent, consumption_w, generation_w, grid_w, battery_w, grid_present, charge_w, discharge_w " +
+      "FROM battery_samples WHERE sampled_at >= ?1 AND sampled_at <= ?2 ORDER BY sampled_at ASC"
+    ).bind(from, now).all(),
+    env.DEYE_DB.prepare(
+      "SELECT event_type, occurred_at FROM grid_events WHERE occurred_at >= ?1 AND occurred_at <= ?2 " +
+      "ORDER BY occurred_at DESC LIMIT 300"
+    ).bind(now - 30 * 24 * 60 * 60 * 1000, now).all()
+  ]);
+  return {
+    ok: true,
+    range,
+    from,
+    to: now,
+    samples: sampleResult.results || [],
+    events: eventResult.results || []
+  };
 }
 
 async function fetchSnapshot(env) {
@@ -222,6 +303,11 @@ async function fetchSnapshot(env) {
   };
 
   await saveSnapshot(env, snapshot);
+  try {
+    await saveAnalyticsSample(env, snapshot, gridHistory);
+  } catch (error) {
+    console.warn("Could not save Deye analytics history:", error.message);
+  }
   return snapshot;
 }
 
@@ -361,6 +447,16 @@ export default {
         return json(await fetchDeviceAlerts(env));
       } catch (error) {
         console.error("Deye alerts error:", error);
+        return json({ error: error.message || "Unknown server error" }, 500);
+      }
+    }
+    if (url.pathname === "/api/history") {
+      if (request.method === "OPTIONS") return json({ ok: true });
+      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+      try {
+        return json(await fetchAnalytics(env, url.searchParams.get("range") || "24h"));
+      } catch (error) {
+        console.error("Deye analytics history error:", error);
         return json({ error: error.message || "Unknown server error" }, 500);
       }
     }

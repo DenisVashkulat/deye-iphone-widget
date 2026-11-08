@@ -139,6 +139,27 @@ async function getSnapshot(env) {
   return { ...(await fetchSnapshot(env)), cacheAgeSeconds: 0 };
 }
 
+async function fetchDeviceHistory(env) {
+  const token = await getToken(env);
+  const deviceSn = env.DEYE_DEVICE_SN || "2608156594";
+  const date = new Date().toISOString().slice(0, 10);
+  const result = await deyeRequest(env, "device/history", token, {
+    deviceSn,
+    granularity: 1,
+    startAt: date,
+    endAt: date,
+    measurePoints: ["GridVoltageL1L2", "GridFrequency"]
+  });
+  return {
+    ok: true,
+    deviceSn,
+    date,
+    granularity: 1,
+    requestedMeasurePoints: ["GridVoltageL1L2", "GridFrequency"],
+    response: result
+  };
+}
+
 async function fetchStationAlerts(env) {
   const token = await getToken(env);
   const now = Math.floor(Date.now() / 1000);
@@ -213,6 +234,16 @@ export default {
         },
         note: "Only presence is reported; secret values are never returned."
       });
+    }
+    if (url.pathname === "/api/device-history") {
+      if (request.method === "OPTIONS") return json({ ok: true });
+      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+      try {
+        return json(await fetchDeviceHistory(env));
+      } catch (error) {
+        console.error("Deye device history error:", error);
+        return json({ error: error.message || "Unknown server error" }, 500);
+      }
     }
     if (url.pathname === "/api/station-alerts") {
       if (request.method === "OPTIONS") return json({ ok: true });

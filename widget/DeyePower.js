@@ -12,13 +12,13 @@ try {
   req.headers = { "Cache-Control": "no-cache", "Pragma": "no-cache" };
   const data = await req.loadJSON();
 
-  const title = w.addText("DEYE POWER");
+  const title = w.addText("DEYE MONITOR");
   title.font = Font.boldSystemFont(12);
   title.textColor = new Color("#9BAABD");
 
   if (!data.configured || data.error) {
     w.addSpacer(10);
-    const err = w.addText(data.error || data.message || "Сервер не настроен");
+    const err = w.addText(data.error || data.message || "Сервер не налаштовано");
     err.textColor = Color.white();
     err.font = Font.systemFont(12);
   } else {
@@ -26,8 +26,8 @@ try {
 
     // Grid status is based on inverter grid voltage and frequency.
     const gridStatus = w.addText(
-      data.gridPresent === true ? "●  СВЕТ ЕСТЬ" :
-      data.gridPresent === false ? "●  СВЕТА НЕТ" : "●  СТАТУС СЕТИ НЕИЗВЕСТЕН"
+      data.gridPresent === true ? "●  СВІТЛО Є" :
+      data.gridPresent === false ? "●  СВІТЛА НЕМАЄ" : "●  СТАН МЕРЕЖІ НЕВІДОМИЙ"
     );
     gridStatus.font = Font.boldSystemFont(13);
     gridStatus.textColor = new Color(
@@ -56,8 +56,8 @@ try {
 
     const hours = Number(data.remainingHours);
     const runtimeText = data.remainingHours == null || !Number.isFinite(hours)
-      ? "Остаток: —"
-      : "Остаток: " + Math.floor(hours) + " ч " +
+      ? "Залишок: —"
+      : "Залишок: " + Math.floor(hours) + " ч " +
         Math.round((hours % 1) * 60) + " мин";
 
     const runtime = w.addText(runtimeText);
@@ -77,41 +77,41 @@ try {
       v.textColor = Color.white();
     }
 
-    row("Нагрузка", Math.round(Number(data.consumptionW) || 0) + " Вт");
+    row("Навантаження", Math.round(Number(data.consumptionW) || 0) + " Вт");
     w.addSpacer(5);
     const chargeW = Number(data.chargeW) || 0;
     const chargeHours = Number(data.chargeHours);
-    const chargeText = percent >= 99.5 ? "Заряжен" :
-      data.gridPresent !== true ? "Света нет" :
+    const chargeText = percent >= 99.5 ? "Заряджено" :
+      data.gridPresent !== true ? "Немає електроенергії" :
       chargeW > 30 && Number.isFinite(chargeHours)
         ? Math.floor(chargeHours) + " ч " + Math.round((chargeHours % 1) * 60) + " мин"
-        : "Ожидание зарядки";
-    row("До полного заряда", chargeText);
+        : "Очікування заряджання";
+    row("До повного заряду", chargeText);
     w.addSpacer(5);
 
     function eventTime(value) {
       return value
-        ? new Date(Number(value)).toLocaleString("ru-UA", {
+        ? new Date(Number(value)).toLocaleString("uk-UA", {
             day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"
           })
-        : "Пока нет данных";
+        : "Поки немає даних";
     }
-    row("Свет пропал", eventTime(data.lastGridOffAt));
+    row("Світло зникло", eventTime(data.lastGridOffAt));
     w.addSpacer(4);
-    row("Свет появился", eventTime(data.lastGridOnAt || data.lastGridPowerAt));
+    row("Світло з’явилося", eventTime(data.lastGridOnAt || data.lastGridPowerAt));
 
     w.addSpacer(7);
     const updatedAt = data.cacheFetchedAt
-      ? new Date(Number(data.cacheFetchedAt)).toLocaleTimeString("ru-UA", {
+      ? new Date(Number(data.cacheFetchedAt)).toLocaleTimeString("uk-UA", {
           hour: "2-digit", minute: "2-digit"
         })
       : "—";
-    const updated = w.addText("Обновлено: " + updatedAt);
+    const updated = w.addText("Оновлено: " + updatedAt);
     updated.font = Font.systemFont(10);
     updated.textColor = new Color("#9BAABD");
   }
 } catch (e) {
-  const error = w.addText("ОШИБКА ПОДКЛЮЧЕНИЯ");
+  const error = w.addText("ПОМИЛКА З’ЄДНАННЯ");
   error.textColor = Color.white();
   w.addSpacer(8);
   const details = w.addText(String(e));

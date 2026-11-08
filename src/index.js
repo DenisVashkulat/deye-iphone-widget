@@ -135,7 +135,12 @@ async function fetchSnapshot(env) {
   const soc = Number(raw.batterySOC ?? 0);
   const batteryPower = Number(raw.batteryPower ?? 0);
   const dischargeW = Math.max(0, Number(raw.dischargePower ?? 0));
-  const chargeW = Math.max(0, Number(raw.chargePower ?? 0));
+  // DeyeCloud may report chargePower as 0/null while batteryPower is negative during charging.
+  // In this inverter's telemetry, a negative batteryPower indicates charging.
+  const reportedChargeW = Number(raw.chargePower ?? 0);
+  const chargeW = reportedChargeW > 30
+    ? reportedChargeW
+    : batteryPower < -30 ? Math.abs(batteryPower) : 0;
   const capacityKwh = Number(env.BATTERY_CAPACITY_KWH || 5.12);
   const reservePercent = Number(env.BATTERY_RESERVE_PERCENT || 10);
   const usableKwh = Math.max(0, capacityKwh * (soc - reservePercent) / 100);

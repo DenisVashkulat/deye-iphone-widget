@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="uk">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -43,61 +43,61 @@
 </head>
 <body><main>
   <header class="top">
-    <div class="brand"><div class="logo">ϟ</div><div><h1>Deye Monitor</h1><div class="subtitle">Домашний энергетический помощник</div></div></div>
-    <div class="top-right"><span class="live" id="live">● Подключение</span><span class="pill updated" id="updated">Обновляем данные…</span></div>
+    <div class="brand"><div class="logo">ϟ</div><div><h1>Deye Monitor</h1><div class="subtitle">Ваш домашній енергетичний помічник</div></div></div>
+    <div class="top-right"><span class="live" id="live">● Підключення</span><span class="pill updated" id="updated">Оновлюємо дані…</span></div>
   </header>
 
   <section class="grid4">
-    <article class="metric"><div class="metric-top"><div class="metric-icon">▣</div><div><div class="metric-value" id="soc">—%</div><div class="metric-label">Заряд батареи</div></div></div><div class="bar"><i id="socbar"></i></div></article>
-    <article class="metric"><div class="metric-top"><div class="metric-icon">ϟ</div><div><div class="metric-value" id="load">— Вт</div><div class="metric-label">Потребление дома</div></div></div><div class="chart-sub" id="load-note">Текущая нагрузка</div></article>
-    <article class="metric"><div class="metric-top"><div class="metric-icon">◷</div><div><div class="metric-value" id="runtime">—</div><div class="metric-label">Остаток работы</div></div></div><div class="chart-sub">При текущем разряде</div></article>
-    <article class="metric"><div class="metric-top"><div class="metric-icon">⚡</div><div><div class="metric-value" id="charge-time">—</div><div class="metric-label">До полного заряда</div></div></div><div class="chart-sub" id="charge-note">Прогноз приблизительный</div></article>
+    <article class="metric"><div class="metric-top"><div class="metric-icon">▣</div><div><div class="metric-value" id="soc">—%</div><div class="metric-label">Заряджання акумулятора</div></div></div><div class="bar"><i id="socbar"></i></div></article>
+    <article class="metric"><div class="metric-top"><div class="metric-icon">ϟ</div><div><div class="metric-value" id="load">— Вт</div><div class="metric-label">Споживання будинку</div></div></div><div class="chart-sub" id="load-note">Поточне навантаження</div></article>
+    <article class="metric"><div class="metric-top"><div class="metric-icon">◷</div><div><div class="metric-value" id="runtime">—</div><div class="metric-label">Час автономної роботи</div></div></div><div class="chart-sub">За поточної потужності розряду</div></article>
+    <article class="metric"><div class="metric-top"><div class="metric-icon">⚡</div><div><div class="metric-value" id="charge-time">—</div><div class="metric-label">До повного заряду</div></div></div><div class="chart-sub" id="charge-note">Орієнтовний прогноз</div></article>
   </section>
 
   <section class="cols2">
     <article class="panel">
-      <div class="panel-title"><span class="ico">ϟ</span> Состояние электросети</div>
-      <div class="grid-state"><div class="state-mark unknown" id="state-mark">…</div><div><div class="state-name unknown" id="grid-status">Проверяем…</div><div class="state-meta" id="grid-meta">Получаем состояние сети</div></div></div>
+      <div class="panel-title"><span class="ico">ϟ</span> Стан електромережі</div>
+      <div class="grid-state"><div class="state-mark unknown" id="state-mark">…</div><div><div class="state-name unknown" id="grid-status">Перевіряємо…</div><div class="state-meta" id="grid-meta">Отримуємо дані про стан мережі</div></div></div>
       <div class="state-details">
-        <div class="detail-row"><i class="dot red"></i><span>Последнее отключение: <b id="last-off">—</b></span></div>
-        <div class="detail-row"><i class="dot green"></i><span>Последнее включение: <b id="last-on">—</b></span></div>
-        <div class="detail-row"><i class="dot"></i><span>Напряжение / частота: <b id="grid-quality">—</b></span></div>
+        <div class="detail-row"><i class="dot red"></i><span>Останнє відключення: <b id="last-off">—</b></span></div>
+        <div class="detail-row"><i class="dot green"></i><span>Останнє відновлення: <b id="last-on">—</b></span></div>
+        <div class="detail-row"><i class="dot"></i><span>Напруга / частота: <b id="grid-quality">—</b></span></div>
       </div>
     </article>
     <article class="panel">
-      <div class="panel-title"><span class="ico">⌘</span> Поток энергии</div>
+      <div class="panel-title"><span class="ico">⌘</span> Потік енергії</div>
       <div class="flow">
-        <div class="flow-node"><div class="flow-symbol">▣</div><strong id="battery-flow">— Вт</strong><small>Батарея</small></div>
+        <div class="flow-node"><div class="flow-symbol">▣</div><strong id="battery-flow">— Вт</strong><small>Акумулятор</small></div>
         <div class="arrow">→</div>
-        <div class="flow-node"><div class="flow-center">Deye</div><strong id="generation-flow">— Вт</strong><small>Генерация</small></div>
+        <div class="flow-node"><div class="flow-center">Deye</div><strong id="generation-flow">— Вт</strong><small>Генерація</small></div>
         <div class="arrow">→</div>
-        <div class="flow-node"><div class="flow-symbol">⌂</div><strong id="consumption-flow">— Вт</strong><small>Дом</small></div>
+        <div class="flow-node"><div class="flow-symbol">⌂</div><strong id="consumption-flow">— Вт</strong><small>Будинок</small></div>
       </div>
-      <div class="flow-extra"><span>Сеть <b id="grid-flow">— Вт</b></span><span>Заряд <b id="charge-flow">— Вт</b></span><span>Разряд <b id="discharge-flow">— Вт</b></span></div>
+      <div class="flow-extra"><span>Мережа <b id="grid-flow">— Вт</b></span><span>Заряджання <b id="charge-flow">— Вт</b></span><span>Розряд <b id="discharge-flow">— Вт</b></span></div>
     </article>
   </section>
 
   <section class="panel charts">
-    <div class="panel-title"><span class="ico">▥</span> Графики и статистика</div>
-    <div class="range" role="group" aria-label="Период графика">
-      <button class="active" data-range="24h">24 часа</button><button data-range="7d">7 дней</button><button data-range="30d">30 дней</button>
+    <div class="panel-title"><span class="ico">▥</span> Графіки та статистика</div>
+    <div class="range" role="group" aria-label="Період графіка">
+      <button class="active" data-range="24h">24 години</button><button data-range="7d">7 днів</button><button data-range="30d">30 дней</button>
     </div>
     <div class="chart-grid">
-      <div class="chart-box"><div class="chart-title">Заряд батареи</div><div id="soc-chart" class="chart-empty">Загружаем историю…</div><div class="chart-sub" id="soc-chart-note">Сохранённые минутные показания</div></div>
-      <div class="chart-box"><div class="chart-title">Мощность и потребление</div><div class="legend"><span><i class="blue"></i>Потребление</span><span><i class="orange"></i>Генерация</span></div><div id="power-chart" class="chart-empty">Загружаем историю…</div><div class="chart-sub" id="power-chart-note">Энергия за период: —</div></div>
+      <div class="chart-box"><div class="chart-title">Заряджання акумулятора</div><div id="soc-chart" class="chart-empty">Загружаем историю…</div><div class="chart-sub" id="soc-chart-note">Сохранённые минутные показания</div></div>
+      <div class="chart-box"><div class="chart-title">Потужність і споживання</div><div class="legend"><span><i class="blue"></i>Споживання</span><span><i class="orange"></i>Генерація</span></div><div id="power-chart" class="chart-empty">Загружаем историю…</div><div class="chart-sub" id="power-chart-note">Энергия за период: —</div></div>
     </div>
   </section>
 
   <section class="cols2">
     <article class="panel">
-      <div class="panel-title"><span class="ico">▦</span> История отключений</div>
-      <div class="stats3"><div class="stat"><strong id="outages-today">—</strong><span>сегодня</span></div><div class="stat"><strong id="outages-week">—</strong><span>за 7 дней</span></div><div class="stat"><strong id="outages-month">—</strong><span>за 30 дней</span></div></div>
-      <div class="muted" id="outage-duration" style="font-size:13px;margin-bottom:8px">Продолжительность последнего отключения: —</div>
-      <div class="event-list" id="outage-list"><div class="empty">История пока собирается</div></div>
+      <div class="panel-title"><span class="ico">▦</span> Історія відключень</div>
+      <div class="stats3"><div class="stat"><strong id="outages-today">—</strong><span>сьогодні</span></div><div class="stat"><strong id="outages-week">—</strong><span>за 7 днів</span></div><div class="stat"><strong id="outages-month">—</strong><span>за 30 днів</span></div></div>
+      <div class="muted" id="outage-duration" style="font-size:13px;margin-bottom:8px">Тривалість останнього відключення: —</div>
+      <div class="event-list" id="outage-list"><div class="empty">Історія поки формується</div></div>
     </article>
     <article class="panel">
-      <div class="panel-title"><span class="ico">♧</span> Последние события</div>
-      <div class="event-list" id="event-list"><div class="empty">Событий пока нет</div></div>
+      <div class="panel-title"><span class="ico">♧</span> Останні події</div>
+      <div class="event-list" id="event-list"><div class="empty">Поки немає подій</div></div>
     </article>
   </section>
 </main>
@@ -115,15 +115,15 @@ function fmtHours(value){
   return Math.floor(mins / 60) + " ч " + (mins % 60) + " мин";
 }
 function fmtDate(value, includeYear){
-  if(value == null || !Number.isFinite(Number(value))) return "нет данных";
+  if(value == null || !Number.isFinite(Number(value))) return "немає даних";
   const d = new Date(Number(value));
-  if(Number.isNaN(d.getTime())) return "нет данных";
-  return d.toLocaleString("ru-RU", includeYear
+  if(Number.isNaN(d.getTime())) return "немає даних";
+  return d.toLocaleString("uk-UA", includeYear
     ? {day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}
     : {day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
 }
 function fmtTime(value){
-  return new Date(Number(value)).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"});
+  return new Date(Number(value)).toLocaleTimeString("uk-UA",{hour:"2-digit",minute:"2-digit"});
 }
 function updateRuntime(){
   if(runtimeBaseHours == null || runtimeBaseAt == null){el("runtime").textContent="—";return;}
@@ -136,25 +136,25 @@ function setStatus(d){
   el("soc").textContent=Math.round(percent)+"%";
   el("socbar").style.width=percent+"%";
   el("load").textContent=Math.round(Number(d.consumptionW)||0)+" Вт";
-  el("load-note").textContent="Обновление показаний от DeyeCloud";
+  el("load-note").textContent="Оновлення показників із DeyeCloud";
   runtimeBaseHours=d.remainingHours==null?null:Number(d.remainingHours);
   runtimeBaseAt=Number(d.cacheFetchedAt||Date.now());
   updateRuntime();
 
   const chargeW=Number(d.chargeW)||0;
   const chargeHours=Number(d.chargeHours);
-  if(percent>=99.5){el("charge-time").textContent="Заряжен";el("charge-note").textContent="Батарея почти полная";}
-  else if(d.gridPresent!==true){el("charge-time").textContent="Нет света";el("charge-note").textContent="Зарядка от сети недоступна";}
-  else if(chargeW>30&&Number.isFinite(chargeHours)){el("charge-time").textContent=fmtHours(chargeHours);el("charge-note").textContent="При текущей мощности зарядки";}
-  else{el("charge-time").textContent="Ожидание";el("charge-note").textContent="Нет активной зарядки";}
+  if(percent>=99.5){el("charge-time").textContent="Заряджено";el("charge-note").textContent="Акумулятор почти полная";}
+  else if(d.gridPresent!==true){el("charge-time").textContent="Немає електроенергії";el("charge-note").textContent="Заряджанняка от сети недоступна";}
+  else if(chargeW>30&&Number.isFinite(chargeHours)){el("charge-time").textContent=fmtHours(chargeHours);el("charge-note").textContent="За поточної потужності заряджання";}
+  else{el("charge-time").textContent="Очікування";el("charge-note").textContent="Немає активного заряджання";}
 
   const mark=el("state-mark"),name=el("grid-status");
-  if(d.gridPresent===true){mark.className="state-mark";mark.textContent="✓";name.className="state-name";name.textContent="Свет есть";}
-  else if(d.gridPresent===false){mark.className="state-mark off";mark.textContent="×";name.className="state-name off";name.textContent="Света нет";}
-  else{mark.className="state-mark unknown";mark.textContent="?";name.className="state-name unknown";name.textContent="Нет данных";}
+  if(d.gridPresent===true){mark.className="state-mark";mark.textContent="✓";name.className="state-name";name.textContent="Світло є";}
+  else if(d.gridPresent===false){mark.className="state-mark off";mark.textContent="×";name.className="state-name off";name.textContent="Світла немає";}
+  else{mark.className="state-mark unknown";mark.textContent="?";name.className="state-name unknown";name.textContent="Немає даних";}
   const age=Number(d.cacheAgeSeconds);
-  el("grid-meta").textContent=(d.gridPresent===true?"Электроснабжение восстановлено":"Состояние сети по данным инвертора")+
-    (Number.isFinite(age)?" · снимок "+(age<60?age+" сек. назад":Math.floor(age/60)+" мин. назад"):"");
+  el("grid-meta").textContent=(d.gridPresent===true?"Електропостачання відновлено":"Стан мережі за даними інвертора")+
+    (Number.isFinite(age)?" · знімок "+(age<60?age+" с тому":Math.floor(age/60)+" хв тому"):"");
   el("last-off").textContent=fmtDate(d.lastGridOffAt,true);
   el("last-on").textContent=fmtDate(d.lastGridOnAt||d.lastGridPowerAt,true);
   const voltage=d.gridVoltageV==null?"—":Math.round(Number(d.gridVoltageV))+" В";
@@ -164,13 +164,13 @@ function setStatus(d){
   el("battery-flow").textContent=Math.round(Math.abs(Number(d.batteryW)||0))+" Вт";
   el("generation-flow").textContent=Math.round(Number(d.generationW)||0)+" Вт";
   el("consumption-flow").textContent=Math.round(Number(d.consumptionW)||0)+" Вт";
-  el("grid-flow").textContent=d.gridW==null?"нет данных":Math.round(Number(d.gridW))+" Вт";
+  el("grid-flow").textContent=d.gridW==null?"немає даних":Math.round(Number(d.gridW))+" Вт";
   el("charge-flow").textContent=Math.round(Number(d.chargeW)||0)+" Вт";
   el("discharge-flow").textContent=Math.round(Number(d.dischargeW)||0)+" Вт";
 
   const fetched=Number(d.cacheFetchedAt||Date.now());
   el("updated").textContent="Обновлено: "+fmtTime(fetched);
-  el("live").textContent="● Данные получены";
+  el("live").textContent="● Дані отримано";
   el("live").style.color="var(--green)";
 }
 function downsample(points,maxPoints){
@@ -180,7 +180,7 @@ function downsample(points,maxPoints){
   return out;
 }
 function makeLineChart(points,key,maxValue,color,area){
-  if(!points.length)return '<div class="chart-empty">Пока недостаточно истории — данные начнут накапливаться автоматически</div>';
+  if(!points.length)return '<div class="chart-empty">Поки недостатньо історичних даних — вони накопичуватимуться автоматично</div>';
   const data=downsample(points,180),left=43,right=615,top=13,bottom=174,w=right-left,h=bottom-top;
   const vals=data.map(p=>Math.max(0,Number(p[key])||0));
   const max=Math.max(maxValue||0,...vals,1);
@@ -196,7 +196,7 @@ function makeLineChart(points,key,maxValue,color,area){
     '<text x="'+left+'" y="201" fill="#91a4bf" font-size="11">'+start+'</text><text x="'+right+'" y="201" text-anchor="end" fill="#91a4bf" font-size="11">'+end+'</text></svg>';
 }
 function renderPowerChart(points){
-  if(!points.length)return '<div class="chart-empty">История начнёт собираться автоматически</div>';
+  if(!points.length)return '<div class="chart-empty">Історія почне накопичуватися автоматично</div>';
   const data=downsample(points,180),left=43,right=615,top=13,bottom=174,w=right-left,h=bottom-top;
   const max=Math.max(100,...data.map(p=>Math.max(Number(p.consumption_w)||0,Number(p.generation_w)||0)));
   const makePath=key=>data.map((p,i)=>{const x=left+(data.length===1?w/2:i*w/(data.length-1));const y=bottom-(Math.max(0,Number(p[key])||0)/max)*h;return (i?"L":"M")+x.toFixed(1)+","+y.toFixed(1)}).join(" ");
@@ -216,10 +216,10 @@ function outagePairs(events){
 }
 function renderEvents(events){
   const recent=[...events].sort((a,b)=>Number(b.occurred_at)-Number(a.occurred_at)).slice(0,8);
-  if(!recent.length)return '<div class="empty">Пока нет зафиксированных переключений сети. История будет пополняться автоматически.</div>';
+  if(!recent.length)return '<div class="empty">Поки не зафіксовано перемикань електромережі. Історія поповнюватиметься автоматично.</div>';
   return recent.map(e=>{
     const on=e.event_type==="grid_on";
-    return '<div class="event"><span class="event-symbol" style="color:'+(on?"var(--green)":"var(--red)")+'">'+(on?"●":"ϟ")+'</span><div><strong>'+(on?"Электроснабжение восстановлено":"Электроэнергия отключена")+'</strong><small>'+fmtDate(e.occurred_at,true)+'</small></div><span class="event-duration">'+fmtTime(e.occurred_at)+'</span></div>';
+    return '<div class="event"><span class="event-symbol" style="color:'+(on?"var(--green)":"var(--red)")+'">'+(on?"●":"ϟ")+'</span><div><strong>'+(on?"Електропостачання відновлено":"Электроэнергия отключена")+'</strong><small>'+fmtDate(e.occurred_at,true)+'</small></div><span class="event-duration">'+fmtTime(e.occurred_at)+'</span></div>';
   }).join("");
 }
 function renderHistory(data){
@@ -236,11 +236,11 @@ function renderHistory(data){
     },0);
     const avg=samples.reduce((s,p)=>s+(Number(p.consumption_w)||0),0)/samples.length;
     const peak=Math.max(...samples.map(p=>Number(p.consumption_w)||0));
-    el("power-chart-note").textContent="Расход за период ≈ "+energy.toFixed(2)+" кВт·ч · средняя нагрузка "+Math.round(avg)+" Вт · пик "+Math.round(peak)+" Вт";
-    el("soc-chart-note").textContent="Последнее сохранённое значение: "+Math.round(Number(samples[samples.length-1].battery_percent)||0)+"% · точек: "+samples.length;
+    el("power-chart-note").textContent="Спожито за період ≈ "+energy.toFixed(2)+" кВт·ч · середнє навантаження "+Math.round(avg)+" Вт · пікова потужність "+Math.round(peak)+" Вт";
+    el("soc-chart-note").textContent="Останнє збережене значення: "+Math.round(Number(samples[samples.length-1].battery_percent)||0)+"% · точок: "+samples.length;
   }else{
-    el("power-chart-note").textContent="Энергия за период: пока недостаточно данных";
-    el("soc-chart-note").textContent="Данные начнут накапливаться автоматически";
+    el("power-chart-note").textContent="Споживання за період: поки недостатньо даних";
+    el("soc-chart-note").textContent="Дані почнуть накопичуватися автоматично";
   }
   const pairs=outagePairs(events),now=Date.now();
   const todayStart=new Date();todayStart.setHours(0,0,0,0);
@@ -249,16 +249,16 @@ function renderHistory(data){
   el("outages-month").textContent=pairs.filter(p=>p.off>=now-30*86400000).length;
   const last=pairs[pairs.length-1];
   const duration=last?last.duration:null;
-  el("outage-duration").textContent="Продолжительность последнего отключения: "+(duration==null?"нет данных":(last.on==null?"идёт сейчас · ":"")+fmtHours(duration/3600000));
+  el("outage-duration").textContent="Тривалість останнього відключення: "+(duration==null?"немає даних":(last.on==null?"триває зараз · ":"")+fmtHours(duration/3600000));
   const recentPairs=[...pairs].reverse().slice(0,5);
-  el("outage-list").innerHTML=recentPairs.length?recentPairs.map(p=>'<div class="event"><span class="event-symbol" style="color:var(--red)">ϟ</span><div><strong>'+fmtDate(p.off,true)+'</strong><small>'+(p.on==null?"Света пока нет":"Восстановлено: "+fmtDate(p.on,true))+'</small></div><span class="event-duration">'+fmtHours(p.duration/3600000)+'</span></div>').join(""):'<div class="empty">История отключений начнёт собираться с момента обновления</div>';
+  el("outage-list").innerHTML=recentPairs.length?recentPairs.map(p=>'<div class="event"><span class="event-symbol" style="color:var(--red)">ϟ</span><div><strong>'+fmtDate(p.off,true)+'</strong><small>'+(p.on==null?"Електропостачання ще не відновлено":"Відновлено: "+fmtDate(p.on,true))+'</small></div><span class="event-duration">'+fmtHours(p.duration/3600000)+'</span></div>').join(""):'<div class="empty">Історія відключень начнёт собираться с момента обновления</div>';
   el("event-list").innerHTML=renderEvents(events);
 }
 async function refreshStatus(){
   try{
     const response=await fetch("/api/status",{cache:"no-store"});
     const data=await response.json();
-    if(!response.ok)throw new Error(data.error||"Ошибка API");
+    if(!response.ok)throw new Error("Не вдалося отримати показники з DeyeCloud");
     if(!data.configured)throw new Error(data.message||"Сервер не настроен");
     setStatus(data);
   }catch(error){
@@ -271,11 +271,11 @@ async function refreshHistory(range){
   try{
     const response=await fetch("/api/history?range="+encodeURIComponent(range),{cache:"no-store"});
     const data=await response.json();
-    if(!response.ok)throw new Error(data.error||"Ошибка истории");
+    if(!response.ok)throw new Error("Не вдалося завантажити історичні дані");
     renderHistory(data);
   }catch(error){
-    el("soc-chart").innerHTML='<div class="chart-empty error">Не удалось загрузить график: '+String(error.message).replace(/[<>]/g,"")+'</div>';
-    el("power-chart").innerHTML='<div class="chart-empty error">Не удалось загрузить график</div>';
+    el("soc-chart").innerHTML='<div class="chart-empty error">Не вдалося завантажити графік: '+String(error.message).replace(/[<>]/g,"")+'</div>';
+    el("power-chart").innerHTML='<div class="chart-empty error">Не вдалося завантажити графік</div>';
   }
 }
 document.querySelectorAll("[data-range]").forEach(button=>{

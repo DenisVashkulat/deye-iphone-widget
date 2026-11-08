@@ -80,12 +80,16 @@ try {
     row("Нагрузка", Math.round(Number(data.consumptionW) || 0) + " Вт");
     w.addSpacer(5);
 
-    const lastLightText = data.lastGridPowerAt
-      ? new Date(Number(data.lastGridPowerAt)).toLocaleString("ru-UA", {
-          day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"
-        })
-      : "Пока нет данных";
-    row("Последний раз был свет", lastLightText);
+    function eventTime(value) {
+      return value
+        ? new Date(Number(value)).toLocaleString("ru-UA", {
+            day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"
+          })
+        : "Пока нет данных";
+    }
+    row("Свет пропал", eventTime(data.lastGridOffAt));
+    w.addSpacer(4);
+    row("Свет появился", eventTime(data.lastGridOnAt || data.lastGridPowerAt));
 
     w.addSpacer(7);
     const updatedAt = data.cacheFetchedAt

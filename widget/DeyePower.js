@@ -79,6 +79,15 @@ try {
 
     row("Нагрузка", Math.round(Number(data.consumptionW) || 0) + " Вт");
     w.addSpacer(5);
+    const chargeW = Number(data.chargeW) || 0;
+    const chargeHours = Number(data.chargeHours);
+    const chargeText = percent >= 99.5 ? "Заряжен" :
+      data.gridPresent !== true ? "Света нет" :
+      chargeW > 30 && Number.isFinite(chargeHours)
+        ? Math.floor(chargeHours) + " ч " + Math.round((chargeHours % 1) * 60) + " мин"
+        : "Ожидание зарядки";
+    row("До полного заряда", chargeText);
+    w.addSpacer(5);
 
     function eventTime(value) {
       return value

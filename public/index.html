@@ -169,7 +169,7 @@ function setStatus(d){
   el("discharge-flow").textContent=Math.round(Number(d.dischargeW)||0)+" Вт";
 
   const fetched=Number(d.cacheFetchedAt||Date.now());
-  el("updated").textContent="Обновлено: "+fmtTime(fetched);
+  el("updated").textContent="Оновлено: "+fmtTime(fetched);
   el("live").textContent="● Дані отримано";
   el("live").style.color="var(--green)";
 }

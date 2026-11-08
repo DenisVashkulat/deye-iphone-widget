@@ -139,9 +139,55 @@ async function getSnapshot(env) {
   return { ...(await fetchSnapshot(env)), cacheAgeSeconds: 0 };
 }
 
+async function fetchDeviceAlerts(env) {
+  const token = await getToken(env);
+  const now = Math.floor(Date.now() / 1000);
+  const startTimestamp = now - 30 * 24 * 60 * 60;
+  const deviceSn = env.DEYE_DEVICE_SN || "2608156594";
+  const result = await deyeRequest(env, "device/alertList", token, {
+    deviceSn,
+    startTimestamp,
+    endTimestamp: now,
+    page: 1,
+    size: 100
+  });
+
+  const alertList = Array.isArray(result.alertList) ? result.alertList : [];
+  return {
+    ok: true,
+    deviceSn,
+    period: {
+      startTimestamp,
+      endTimestamp: now,
+      days: 30
+    },
+    total: Number(result.total ?? alertList.length),
+    returned: alertList.length,
+    alerts: alertList.map(alert => ({
+      alertCode: alert.alertCode ?? null,
+      alertName: alert.alertName ?? null,
+      protocolName: alert.protocolName ?? null,
+      description: alert.description ?? null,
+      alertStartTime: alert.alertStartTime ?? null,
+      alertEndTime: alert.alertEndTime ?? null,
+      status: alert.status ?? null
+    }))
+  };
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname === "/api/alerts") {
+      if (request.method === "OPTIONS") return json({ ok: true });
+      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+      try {
+        return json(await fetchDeviceAlerts(env));
+      } catch (error) {
+        console.error("Deye alerts error:", error);
+        return json({ error: error.message || "Unknown server error" }, 500);
+      }
+    }
     if (url.pathname === "/api/status") {
       if (request.method === "OPTIONS") return json({ ok: true });
       if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);

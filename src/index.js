@@ -53,6 +53,20 @@ async function getToken(env) {
   return data.accessToken;
 }
 
+async function readSavedSnapshot(env) {
+  const row = await env.DEYE_DB.prepare(
+    "SELECT payload FROM snapshots WHERE id = ?1"
+  ).bind(CACHE_KEY).first();
+  return row?.payload ? JSON.parse(row.payload) : null;
+}
+
+async function saveSnapshot(env, snapshot) {
+  await env.DEYE_DB.prepare(
+    "INSERT INTO snapshots (id, payload, updated_at) VALUES (?1, ?2, ?3) " +
+    "ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at"
+  ).bind(CACHE_KEY, JSON.stringify(snapshot), snapshot.cacheFetchedAt).run();
+}
+
 async function fetchSnapshot(env) {
   const token = await getToken(env);
   const stationId = Number(env.DEYE_STATION_ID);
@@ -78,7 +92,9 @@ async function fetchSnapshot(env) {
   const fetchedAt = Date.now();
 
   let previous = null;
-  try { previous = await env.DEYE_CACHE.get(CACHE_KEY, "json"); } catch (error) {
+  try {
+    previous = await readSavedSnapshot(env);
+  } catch (error) {
     console.warn("Could not read previous Deye snapshot:", error.message);
   }
   const lastGridPowerAt = gridPresent
@@ -106,14 +122,16 @@ async function fetchSnapshot(env) {
     cacheFetchedAt: fetchedAt
   };
 
-  await env.DEYE_CACHE.put(CACHE_KEY, JSON.stringify(snapshot));
+  await saveSnapshot(env, snapshot);
   return snapshot;
 }
 
 async function getSnapshot(env) {
   let snapshot = null;
-  try { snapshot = await env.DEYE_CACHE.get(CACHE_KEY, "json"); } catch (error) {
-    console.warn("Could not read Deye cache:", error.message);
+  try {
+    snapshot = await readSavedSnapshot(env);
+  } catch (error) {
+    console.warn("Could not read Deye snapshot:", error.message);
   }
   if (snapshot?.cacheFetchedAt && Date.now() - Number(snapshot.cacheFetchedAt) < CACHE_MAX_AGE_MS) {
     return { ...snapshot, cacheAgeSeconds: Math.floor((Date.now() - Number(snapshot.cacheFetchedAt)) / 1000) };

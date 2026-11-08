@@ -76,7 +76,7 @@ function updateRuntime(){
 }
 async function refresh(){
   try{
-    const r=await fetch("/.netlify/functions/status",{cache:"no-store"});
+    const r=await fetch("/api/status",{cache:"no-store"});
     const d=await r.json();
     if(!r.ok)throw Error(d.error||"Ошибка API");
     if(!d.configured){el("message").textContent=d.message||"Сервер не настроен";return;}

@@ -45,7 +45,7 @@
 
   <div class="grid">
     <section class="panel"><div class="label">Нагрузка</div><div class="value" id="load">— W</div></section>
-    <section class="panel"><div class="label">Солнечная генерация</div><div class="value" id="solar">— W</div></section>
+    <section class="panel"><div class="label">До полного заряда</div><div class="value" id="charge-time">—</div></section>
     <section class="panel"><div class="label">Мощность сети</div><div class="value" id="grid-power">— W</div></section>
     <section class="panel"><div class="label">Аккумулятор</div><div class="value" id="battery">— W</div></section>
   </div>
@@ -104,7 +104,17 @@ async function refresh(){
     runtimeBaseAt = Number(d.cacheFetchedAt || Date.now());
     updateRuntime();
     el("load").textContent=Math.round(Number(d.consumptionW)||0)+" W";
-    el("solar").textContent=Math.round(Number(d.generationW)||0)+" W";
+    const chargeW = Number(d.chargeW) || 0;
+    const chargeHours = Number(d.chargeHours);
+    if(percent >= 99.5){
+      el("charge-time").textContent="Заряжен";
+    }else if(d.gridPresent !== true){
+      el("charge-time").textContent="Света нет";
+    }else if(chargeW > 30 && Number.isFinite(chargeHours)){
+      el("charge-time").textContent=hours(chargeHours);
+    }else{
+      el("charge-time").textContent="Ожидание зарядки";
+    }
     el("grid-power").textContent=d.gridW==null?"Нет данных":Math.round(Number(d.gridW))+" W";
     el("battery").textContent=Math.round(Number(d.batteryW)||0)+" W";
     el("message").textContent="Получено сервером: "+new Date(d.cacheFetchedAt||Date.now()).toLocaleString("ru-RU");

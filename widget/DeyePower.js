@@ -1,5 +1,5 @@
 // Scriptable widget for iPhone. DeyeCloud data via Netlify.
-const API_URL = "https://gentle-maamoul-1fc77c.netlify.app/.netlify/functions/status";
+const API_URL = "https://deye-iphone-widget.denis0672706583.workers.dev/api/status";
 
 const w = new ListWidget();
 w.backgroundColor = new Color("#101722");

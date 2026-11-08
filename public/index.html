@@ -30,8 +30,10 @@
   <section class="panel">
     <div class="label">Состояние электросети</div>
     <div class="status unknown" id="grid-status">● Проверяем…</div>
-    <div class="label" style="margin-top:9px">Последнее появление света</div>
-    <div class="last-light" id="last-light">Пока нет данных</div>
+    <div class="label" style="margin-top:9px">Последнее отключение</div>
+    <div class="last-light" id="last-off">Пока нет данных</div>
+    <div class="label" style="margin-top:12px">Последнее восстановление</div>
+    <div class="last-light" id="last-on">Пока нет данных</div>
   </section>
 
   <section class="panel">
@@ -92,7 +94,8 @@ async function refresh(){
       status.textContent="● СТАТУС НЕИЗВЕСТЕН";
       status.className="status unknown";
     }
-    el("last-light").textContent=dateTime(d.lastGridPowerAt);
+    el("last-off").textContent=dateTime(d.lastGridOffAt);
+    el("last-on").textContent=dateTime(d.lastGridOnAt || d.lastGridPowerAt);
 
     const percent=Math.max(0,Math.min(100,Number(d.batteryPercent)||0));
     el("soc").textContent=Math.round(percent)+"%";

@@ -89,10 +89,13 @@ async function fetchGridHistory(env, token) {
     const frequency = values.GridFrequency;
     return {
       time: Number(row.time) * 1000,
+      voltageValid: Number.isFinite(voltage),
+      frequencyValid: Number.isFinite(frequency),
       gridPresent: Number.isFinite(voltage) && voltage >= 180 &&
         Number.isFinite(frequency) && frequency >= 45 && frequency <= 55
     };
-  }).filter(point => Number.isFinite(point.time) && Number.isFinite(point.gridPresent === true ? 1 : 0))
+  }).filter(point => Number.isFinite(point.time) && point.voltageValid && point.frequencyValid)
+    .map(point => ({ time: point.time, gridPresent: point.gridPresent }))
     .sort((a, b) => a.time - b.time);
 }
 

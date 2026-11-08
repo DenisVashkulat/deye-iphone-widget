@@ -67,12 +67,62 @@ async function saveSnapshot(env, snapshot) {
   ).bind(CACHE_KEY, JSON.stringify(snapshot), snapshot.cacheFetchedAt).run();
 }
 
+async function fetchGridHistory(env, token) {
+  const deviceSn = env.DEYE_DEVICE_SN || "2608156594";
+  const date = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Kyiv",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date());
+  const result = await deyeRequest(env, "device/history", token, {
+    deviceSn,
+    granularity: 1,
+    startAt: date,
+    endAt: date,
+    measurePoints: ["GridVoltageL1L2", "GridFrequency"]
+  });
+  const rows = Array.isArray(result.dataList) ? result.dataList : [];
+  return rows.map(row => {
+    const values = Object.fromEntries((row.itemList || []).map(item => [item.key, Number(item.value)]));
+    const voltage = values.GridVoltageL1L2;
+    const frequency = values.GridFrequency;
+    return {
+      time: Number(row.time) * 1000,
+      gridPresent: Number.isFinite(voltage) && voltage >= 180 &&
+        Number.isFinite(frequency) && frequency >= 45 && frequency <= 55
+    };
+  }).filter(point => Number.isFinite(point.time)).sort((a, b) => a.time - b.time);
+}
+
+function getGridTransitions(points, previous) {
+  let lastGridOffAt = previous?.lastGridOffAt ?? null;
+  let lastGridOnAt = previous?.lastGridOnAt ?? previous?.lastGridPowerAt ?? null;
+  let previousState = null;
+
+  for (const point of points) {
+    if (previousState !== null && point.gridPresent !== previousState) {
+      if (point.gridPresent) lastGridOnAt = point.time;
+      else lastGridOffAt = point.time;
+    }
+    previousState = point.gridPresent;
+  }
+
+  return { lastGridOffAt, lastGridOnAt };
+}
+
 async function fetchSnapshot(env) {
   const token = await getToken(env);
   const stationId = Number(env.DEYE_STATION_ID);
   const raw = await deyeRequest(env, "station/latest", token, { stationId });
   const deviceSn = env.DEYE_DEVICE_SN || "2608156594";
   const telemetry = await deyeRequest(env, "device/latest", token, { deviceList: [deviceSn] });
+  let gridHistory = [];
+  try {
+    gridHistory = await fetchGridHistory(env, token);
+  } catch (error) {
+    console.warn("Could not read Deye grid history:", error.message);
+  }
   const devices = telemetry.deviceDataList || telemetry.devices || [];
   const inverter = devices.find(device => device.deviceSn === deviceSn) || devices[0];
   const points = Object.fromEntries((inverter?.dataList || []).map(point => [point.key, Number(point.value)]));
@@ -97,9 +147,10 @@ async function fetchSnapshot(env) {
   } catch (error) {
     console.warn("Could not read previous Deye snapshot:", error.message);
   }
-  const lastGridPowerAt = gridPresent
+  const transitions = getGridTransitions(gridHistory, previous);
+  const lastGridPowerAt = transitions.lastGridOnAt ?? (gridPresent
     ? (inverter?.collectionTime ? Number(inverter.collectionTime) * 1000 : fetchedAt)
-    : (previous?.lastGridPowerAt ?? null);
+    : (previous?.lastGridPowerAt ?? null));
 
   const snapshot = {
     configured: true,
@@ -114,6 +165,8 @@ async function fetchSnapshot(env) {
     gridFrequencyHz,
     gridPresent,
     lastGridPowerAt,
+    lastGridOffAt: transitions.lastGridOffAt,
+    lastGridOnAt: transitions.lastGridOnAt,
     batteryW: batteryPower,
     dischargeW,
     remainingHours,

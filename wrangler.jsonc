@@ -8,10 +8,12 @@
     "binding": "ASSETS",
     "run_worker_first": ["/api/*"]
   },
-  "kv_namespaces": [
+  "d1_databases": [
     {
-      "binding": "DEYE_CACHE",
-      "id": "REPLACE_WITH_CLOUDFLARE_KV_NAMESPACE_ID"
+      "binding": "DEYE_DB",
+      "database_name": "deye-widget-cache",
+      "database_id": "REPLACE_WITH_CLOUDFLARE_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
     }
   ],
   "triggers": {

@@ -135,10 +135,14 @@ async function fetchSnapshot(env) {
   const soc = Number(raw.batterySOC ?? 0);
   const batteryPower = Number(raw.batteryPower ?? 0);
   const dischargeW = Math.max(0, Number(raw.dischargePower ?? 0));
+  const chargeW = Math.max(0, Number(raw.chargePower ?? 0));
   const capacityKwh = Number(env.BATTERY_CAPACITY_KWH || 5.12);
   const reservePercent = Number(env.BATTERY_RESERVE_PERCENT || 10);
   const usableKwh = Math.max(0, capacityKwh * (soc - reservePercent) / 100);
   const remainingHours = dischargeW > 30 ? usableKwh * 1000 / dischargeW : null;
+  const chargeHours = chargeW > 30 && soc < 100
+    ? capacityKwh * (100 - soc) / 100 * 1000 / chargeW
+    : null;
   const fetchedAt = Date.now();
 
   let previous = null;
@@ -168,6 +172,8 @@ async function fetchSnapshot(env) {
     lastGridOffAt: transitions.lastGridOffAt,
     lastGridOnAt: transitions.lastGridOnAt,
     batteryW: batteryPower,
+    chargeW,
+    chargeHours,
     dischargeW,
     remainingHours,
     capacityKwh,

@@ -139,11 +139,38 @@ async function fetchSnapshot(env) {
   const capacityKwh = Number(env.BATTERY_CAPACITY_KWH || 5.12);
   const reservePercent = Number(env.BATTERY_RESERVE_PERCENT || 10);
   const usableKwh = Math.max(0, capacityKwh * (soc - reservePercent) / 100);
-  const remainingHours = dischargeW > 30 ? usableKwh * 1000 / dischargeW : null;
+  const fetchedAt = Date.now();
+
+  // Keep one discharge-power sample per Worker refresh. The cron runs every minute.
+  // Use a rolling 15-minute average once enough history has accumulated.
+  await env.DEYE_DB.prepare(
+    "CREATE TABLE IF NOT EXISTS discharge_samples (sampled_at INTEGER PRIMARY KEY, discharge_w REAL NOT NULL)"
+  ).run();
+  await env.DEYE_DB.prepare(
+    "INSERT OR REPLACE INTO discharge_samples (sampled_at, discharge_w) VALUES (?1, ?2)"
+  ).bind(fetchedAt, dischargeW).run();
+  await env.DEYE_DB.prepare(
+    "DELETE FROM discharge_samples WHERE sampled_at < ?1"
+  ).bind(fetchedAt - 60 * 60 * 1000).run();
+
+  const dischargeStats = await env.DEYE_DB.prepare(
+    "SELECT AVG(discharge_w) AS average_w, COUNT(*) AS sample_count, " +
+    "MIN(sampled_at) AS first_sample_at, MAX(sampled_at) AS last_sample_at " +
+    "FROM discharge_samples WHERE sampled_at >= ?1 AND sampled_at <= ?2"
+  ).bind(fetchedAt - 15 * 60 * 1000, fetchedAt).first();
+
+  const averageDischargeW = Number(dischargeStats?.average_w ?? 0);
+  const sampleCount = Number(dischargeStats?.sample_count ?? 0);
+  const sampleSpanMs = Number(dischargeStats?.last_sample_at ?? 0) -
+    Number(dischargeStats?.first_sample_at ?? 0);
+  const hasReliableAverage = sampleCount >= 5 && sampleSpanMs >= 4 * 60 * 1000;
+  const effectiveDischargeW = hasReliableAverage ? averageDischargeW : dischargeW;
+  const remainingHours = effectiveDischargeW > 30
+    ? usableKwh * 1000 / effectiveDischargeW
+    : null;
   const chargeHours = chargeW > 30 && soc < 100
     ? capacityKwh * (100 - soc) / 100 * 1000 / chargeW
     : null;
-  const fetchedAt = Date.now();
 
   let previous = null;
   try {
@@ -175,7 +202,10 @@ async function fetchSnapshot(env) {
     chargeW,
     chargeHours,
     dischargeW,
+    dischargeAverageW: hasReliableAverage ? averageDischargeW : null,
+    dischargeSampleCount: sampleCount,
     remainingHours,
+    remainingHoursInstant: dischargeW > 30 ? usableKwh * 1000 / dischargeW : null,
     capacityKwh,
     reservePercent,
     cacheFetchedAt: fetchedAt

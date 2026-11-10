@@ -36,6 +36,14 @@
     .stats3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 12px}.stat{text-align:center;padding:10px 6px;background:#101a2c;border:1px solid #263753;border-radius:13px}.stat strong{display:block;font-size:26px;color:#69baff}.stat span{color:var(--muted);font-size:12px}
     .event-list{display:grid;gap:0}.event{display:grid;grid-template-columns:22px 1fr auto;align-items:start;gap:9px;padding:10px 0;border-top:1px solid #25344d}.event:first-child{border-top:0}.event-symbol{font-size:17px}.event strong{font-size:13px}.event small{display:block;color:var(--muted);margin-top:3px;line-height:1.35}.event-duration{color:#c4d0e2;font-size:12px;white-space:nowrap}
     .empty{color:var(--muted);font-size:13px;padding:20px 4px;text-align:center}.muted{color:var(--muted)}.error{color:var(--red)}
+    .dtek-panel{margin-top:16px}
+    .dtek-address{font-size:14px;color:#c5d2e5;margin:-5px 0 14px}
+    .dtek-status{display:flex;align-items:center;gap:9px;font-weight:750;font-size:17px}
+    .dtek-status .dot{width:11px;height:11px;border-radius:50%;background:var(--yellow);box-shadow:0 0 12px #f5c85b55}
+    .dtek-copy{color:#bdcbe0;line-height:1.55;font-size:14px;margin:10px 0}
+    .dtek-link{display:inline-flex;align-items:center;gap:8px;margin-top:5px;padding:11px 15px;border:1px solid #315783;border-radius:12px;background:#142a46;color:#8fc5ff;text-decoration:none;font-weight:700}
+    .dtek-note{display:block;color:var(--muted);font-size:12px;line-height:1.5;margin-top:12px}
+
     .chart-empty{height:180px;display:grid;place-items:center;color:var(--muted);font-size:13px}
     @media(max-width:850px){.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}.cols2{grid-template-columns:1fr}.chart-grid{grid-template-columns:1fr}.top{align-items:flex-start}.flow{max-width:650px;margin:auto}}
     @media(max-width:520px){body{padding:15px 11px 28px}.top{display:block}.top-right{justify-content:flex-start;margin-top:12px}.logo{width:45px;height:45px}.metric{padding:14px;min-height:119px}.metric-icon{width:34px;height:34px}.grid4{gap:9px}.metric-value{font-size:27px}.panel{padding:15px;border-radius:16px}.panel-title{font-size:16px}.grid-state{gap:13px;min-height:112px}.state-mark{width:65px;height:65px;font-size:34px;border-width:6px}.state-name{font-size:23px}.flow{grid-template-columns:1fr 28px 1fr 28px 1fr;gap:0}.flow-symbol{font-size:27px}.flow-center{width:50px;height:50px;font-size:12px}.flow-node strong{font-size:16px}.flow-node small{font-size:11px}.arrow{font-size:19px}.flow-extra{gap:12px}.range button{padding:7px 12px}.stats3{gap:5px}.stat strong{font-size:22px}}
@@ -88,9 +96,13 @@
     </div>
   </section>
 
-  <section class="panel">
-    <div class="panel-title"><span class="ico">♧</span> Останні події</div>
-    <div class="event-list" id="event-list"><div class="empty">Поки немає подій</div></div>
+  <section class="panel dtek-panel" id="dtek-panel">
+    <div class="panel-title"><span class="ico">▤</span> Графік відключень ДТЕК</div>
+    <div class="dtek-address">Київ · вул. Академіка Заболотного, 58</div>
+    <div class="dtek-status"><span class="dot"></span> Прогнозний графік недоступний</div>
+    <p class="dtek-copy">За інформацією офіційного сервісу ДТЕК, цей будинок має складну схему електроживлення — різні квартири можуть бути підключені до різних ліній. Тому ДТЕК наразі не може показати єдиний прогнозний графік для всього будинку.</p>
+    <a class="dtek-link" href="https://www.dtek-kem.com.ua/ua/shutdowns" target="_blank" rel="noopener noreferrer">Перевірити адресу на сайті ДТЕК ↗</a>
+    <small class="dtek-note">Фактичні вимкнення та відновлення електроенергії для вашого підключення відображаються вище в розділі «Останні події» за даними інвертора Deye. Це не прогноз ДТЕК.</small>
   </section>
 </main>
 <script>

@@ -237,16 +237,6 @@ function renderHistory(data){
     el("power-chart-note").textContent="Споживання за період: поки недостатньо даних";
     el("soc-chart-note").textContent="Дані почнуть накопичуватися автоматично";
   }
-  const pairs=outagePairs(events),now=Date.now();
-  const todayStart=new Date();todayStart.setHours(0,0,0,0);
-  el("outages-today").textContent=pairs.filter(p=>p.off>=todayStart.getTime()).length;
-  el("outages-week").textContent=pairs.filter(p=>p.off>=now-7*86400000).length;
-  el("outages-month").textContent=pairs.filter(p=>p.off>=now-30*86400000).length;
-  const last=pairs[pairs.length-1];
-  const duration=last?last.duration:null;
-  el("outage-duration").textContent="Тривалість останнього відключення: "+(duration==null?"немає даних":(last.on==null?"триває зараз · ":"")+fmtHours(duration/3600000));
-  const recentPairs=[...pairs].reverse().slice(0,5);
-  el("outage-list").innerHTML=recentPairs.length?recentPairs.map(p=>'<div class="event"><span class="event-symbol" style="color:var(--red)">ϟ</span><div><strong>'+fmtDate(p.off,true)+'</strong><small>'+(p.on==null?"Електропостачання ще не відновлено":"Відновлено: "+fmtDate(p.on,true))+'</small></div><span class="event-duration">'+fmtHours(p.duration/3600000)+'</span></div>').join(""):'<div class="empty">Історія відключень накопичуватиметься від моменту оновлення</div>';
   el("event-list").innerHTML=renderEvents(events);
 }
 async function refreshStatus(){

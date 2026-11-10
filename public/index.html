@@ -88,17 +88,9 @@
     </div>
   </section>
 
-  <section class="cols2">
-    <article class="panel">
-      <div class="panel-title"><span class="ico">▦</span> Історія відключень</div>
-      <div class="stats3"><div class="stat"><strong id="outages-today">—</strong><span>сьогодні</span></div><div class="stat"><strong id="outages-week">—</strong><span>за 7 днів</span></div><div class="stat"><strong id="outages-month">—</strong><span>за 30 днів</span></div></div>
-      <div class="muted" id="outage-duration" style="font-size:13px;margin-bottom:8px">Тривалість останнього відключення: —</div>
-      <div class="event-list" id="outage-list"><div class="empty">Історія поки формується</div></div>
-    </article>
-    <article class="panel">
-      <div class="panel-title"><span class="ico">♧</span> Останні події</div>
-      <div class="event-list" id="event-list"><div class="empty">Поки немає подій</div></div>
-    </article>
+  <section class="panel">
+    <div class="panel-title"><span class="ico">♧</span> Останні події</div>
+    <div class="event-list" id="event-list"><div class="empty">Поки немає подій</div></div>
   </section>
 </main>
 <script>
@@ -215,11 +207,14 @@ function outagePairs(events){
   return pairs;
 }
 function renderEvents(events){
+  const pairs=outagePairs(events);
   const recent=[...events].sort((a,b)=>Number(b.occurred_at)-Number(a.occurred_at)).slice(0,8);
   if(!recent.length)return '<div class="empty">Поки не зафіксовано перемикань електромережі. Історія поповнюватиметься автоматично.</div>';
   return recent.map(e=>{
     const on=e.event_type==="grid_on";
-    return '<div class="event"><span class="event-symbol" style="color:'+(on?"var(--green)":"var(--red)")+'">'+(on?"●":"ϟ")+'</span><div><strong>'+(on?"Електропостачання відновлено":"Електропостачання зникло")+'</strong><small>'+fmtDate(e.occurred_at,true)+'</small></div><span class="event-duration">'+fmtTime(e.occurred_at)+'</span></div>';
+    const pair=on?pairs.find(p=>p.on===Number(e.occurred_at)):null;
+    const duration=pair?'Світла не було: '+fmtHours(pair.duration/3600000):"";
+    return '<div class="event"><span class="event-symbol" style="color:'+(on?"var(--green)":"var(--red)")+'">'+(on?"●":"ϟ")+'</span><div><strong>'+(on?"Електропостачання відновлено":"Електропостачання зникло")+'</strong><small>'+fmtDate(e.occurred_at,true)+'</small>'+(duration?'<small>'+duration+'</small>':"")+'</div><span class="event-duration">'+fmtTime(e.occurred_at)+'</span></div>';
   }).join("");
 }
 function renderHistory(data){

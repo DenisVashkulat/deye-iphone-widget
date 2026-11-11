@@ -8,8 +8,8 @@ const json = (data, status = 200) => new Response(JSON.stringify(data), {
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type"
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, X-Tuya-Test-Token"
   }
 });
 
@@ -734,6 +734,30 @@ export default {
       } catch (error) {
         console.error("Deye analytics history error:", error);
         return json({ error: error.message || "Unknown server error" }, 500);
+      }
+    }
+    if (url.pathname === "/api/tuya-test-off") {
+      if (request.method === "OPTIONS") return json({ ok: true });
+      if (request.method !== "POST") return json({ ok: false, error: "Method not allowed" }, 405);
+      const expectedToken = env.TUYA_TEST_TOKEN;
+      const suppliedToken = request.headers.get("X-Tuya-Test-Token");
+      if (!expectedToken || !suppliedToken || suppliedToken !== expectedToken) {
+        return json({ ok: false, error: "Unauthorized" }, 401);
+      }
+      try {
+        const command = await setTuyaSwitch(env, false);
+        const status = await fetchTuyaDeviceStatus(env);
+        return json({
+          ok: true,
+          commandAccepted: true,
+          requestedState: "OFF",
+          switchState: status.switchState,
+          tuyaResult: command.result ?? null,
+          checkedAt: status.checkedAt
+        });
+      } catch (error) {
+        console.error("Tuya protected OFF test failed:", error);
+        return json({ ok: false, error: error.message || "Tuya OFF command failed" }, 502);
       }
     }
     if (url.pathname === "/api/tuya-status") {

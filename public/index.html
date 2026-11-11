@@ -342,7 +342,7 @@ function renderDtekAddress(data){
   if(data.startAt)lines.push("Початок: "+data.startAt);
   if(data.expectedEndAt)lines.push("Очікуване відновлення: "+data.expectedEndAt);
   if(data.groups?.length)lines.push("Група(и) адреси: "+data.groups.join(", "));
-  box.textContent=lines.join("\\n");
+  box.textContent=lines.join("\n");
 }
 async function refreshDtekAddress(){
   try{

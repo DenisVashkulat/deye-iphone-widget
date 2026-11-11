@@ -407,148 +407,6 @@ async function fetchDeviceAlerts(env) {
   };
 }
 
-async function tuyaHmac(message, secret) {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
-  return [...new Uint8Array(signature)].map(byte => byte.toString(16).padStart(2, "0")).join("").toUpperCase();
-}
-
-async function tuyaSha256(value) {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
-}
-
-async function tuyaSignedHeaders(env, path, accessToken = "", method = "GET", body = "") {
-  const clientId = env.TUYA_ACCESS_ID;
-  const secret = env.TUYA_ACCESS_SECRET;
-  if (!clientId || !secret || !env.TUYA_DEVICE_ID) {
-    throw new Error("Tuya secrets are incomplete. Check TUYA_ACCESS_ID, TUYA_ACCESS_SECRET and TUYA_DEVICE_ID.");
-  }
-
-  const timestamp = Date.now().toString();
-  const nonce = crypto.randomUUID().replace(/-/g, "");
-  const contentHash = await tuyaSha256(body);
-  const stringToSign = [method, contentHash, "", path].join("\n");
-  const signInput = accessToken
-    ? clientId + accessToken + timestamp + nonce + stringToSign
-    : clientId + timestamp + nonce + stringToSign;
-  const sign = await tuyaHmac(signInput, secret);
-
-  const headers = {
-    client_id: clientId,
-    sign,
-    sign_method: "HMAC-SHA256",
-    t: timestamp,
-    nonce,
-    Accept: "application/json"
-  };
-  if (accessToken) headers.access_token = accessToken;
-  return headers;
-}
-
-async function tuyaApiRequest(env, path, options = {}) {
-  const baseUrl = env.TUYA_API_BASE_URL || "https://openapi.tuyaeu.com";
-  const tokenPath = "/v1.0/token?grant_type=1";
-  const tokenResponse = await fetch(baseUrl + tokenPath, {
-    method: "GET",
-    headers: await tuyaSignedHeaders(env, tokenPath)
-  });
-  const tokenData = await tokenResponse.json();
-  if (!tokenResponse.ok || tokenData.success !== true || !tokenData.result?.access_token) {
-    throw new Error("Tuya authorization failed: " + (tokenData.msg || "token was not returned") + " (code " + (tokenData.code ?? tokenResponse.status) + ")");
-  }
-  const accessToken = tokenData.result.access_token;
-  const method = options.method || "GET";
-  const body = options.body || "";
-  const response = await fetch(baseUrl + path, {
-    method,
-    headers: await tuyaSignedHeaders(env, path, accessToken, method, body),
-    ...(body ? { body } : {})
-  });
-  const data = await response.json();
-  if (!response.ok || data.success !== true) {
-    throw new Error("Tuya API request failed: " + (data.msg || "unknown error") + " (code " + (data.code ?? response.status) + ")");
-  }
-  return data;
-}
-
-async function setTuyaSwitch(env, enabled) {
-  const path = "/v1.0/iot-03/devices/" + encodeURIComponent(env.TUYA_DEVICE_ID) + "/commands";
-  const body = JSON.stringify({ commands: [{ code: "switch_1", value: Boolean(enabled) }] });
-  return tuyaApiRequest(env, path, { method: "POST", body });
-}
-async function fetchTuyaDeviceStatus(env) {
-  const deviceId = env.TUYA_DEVICE_ID;
-  const data = await tuyaApiRequest(env, `/v1.0/iot-03/devices/${encodeURIComponent(deviceId)}/status`);
-  const statusList = Array.isArray(data.result) ? data.result : [];
-  const switchPoint = statusList.find(point => point.code === "switch_1");
-  return {
-    ok: true,
-    configured: true,
-    deviceId,
-    switchCode: "switch_1",
-    switchState: typeof switchPoint?.value === "boolean" ? switchPoint.value : null,
-    statusAvailable: Boolean(switchPoint),
-    checkedAt: new Date().toISOString(),
-    source: "Tuya Cloud device status"
-  };
-}
-
-async function fetchTuyaDeviceInfo(env) {
-  const deviceId = env.TUYA_DEVICE_ID;
-  const encodedId = encodeURIComponent(deviceId);
-  const [deviceData, specData, statusData] = await Promise.all([
-    tuyaApiRequest(env, `/v1.0/iot-03/devices/${encodedId}`),
-    tuyaApiRequest(env, `/v1.0/iot-03/devices/${encodedId}/specification`),
-    tuyaApiRequest(env, `/v1.0/iot-03/devices/${encodedId}/status`)
-  ]);
-  const device = deviceData.result || {};
-  const spec = specData.result || {};
-  const statusList = Array.isArray(statusData.result) ? statusData.result : [];
-  const status = Object.fromEntries(statusList.map(item => [item.code, item.value]));
-  const safeFunction = item => ({
-    code: item.code ?? null,
-    type: item.type ?? null,
-    values: item.values ?? null
-  });
-  return {
-    ok: true,
-    configured: true,
-    deviceId,
-    device: {
-      name: device.name ?? null,
-      productId: device.product_id ?? null,
-      productName: device.product_name ?? null,
-      category: device.category ?? null,
-      model: device.model ?? null,
-      online: device.online ?? null
-    },
-    liveStatus: {
-      switchState: typeof status.switch_1 === "boolean" ? status.switch_1 : null,
-      currentRaw: status.cur_current ?? null,
-      powerRaw: status.cur_power ?? null,
-      voltageRaw: status.cur_voltage ?? null,
-      energyRaw: status.add_ele ?? null,
-      fault: status.fault ?? null,
-      relayStatus: status.relay_status ?? null,
-      overchargeProtection: status.overcharge_switch ?? null
-    },
-    specification: {
-      category: spec.category ?? null,
-      functions: Array.isArray(spec.functions) ? spec.functions.map(safeFunction) : [],
-      status: Array.isArray(spec.status) ? spec.status.map(safeFunction) : []
-    },
-    note: "Live measurements are telemetry, not the plug's rated limits. Tuya API does not confirm the maximum safe load; verify it from manufacturer documentation.",
-    checkedAt: new Date().toISOString(),
-    source: "Tuya Cloud device detail, specification and live status"
-  };
-}
 async function fetchDtekSchedule() {
   const response = await fetch(
     "https://app.yasno.ua/api/blackout-service/public/shutdowns/regions/25/dsos/902/planned-outages",
@@ -736,26 +594,6 @@ export default {
         return json({ error: error.message || "Unknown server error" }, 500);
       }
     }
-    if (url.pathname === "/api/tuya-status") {
-      if (request.method === "OPTIONS") return json({ ok: true });
-      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
-      try {
-        return json(await fetchTuyaDeviceStatus(env));
-      } catch (error) {
-        console.error("Tuya device status error:", error);
-        return json({ ok: false, error: error.message || "Could not load Tuya device status" }, 502);
-      }
-    }
-    if (url.pathname === "/api/tuya-info") {
-      if (request.method === "OPTIONS") return json({ ok: true });
-      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
-      try {
-        return json(await fetchTuyaDeviceInfo(env));
-      } catch (error) {
-        console.error("Tuya device info error:", error);
-        return json({ ok: false, error: error.message || "Could not load Tuya device information" }, 502);
-      }
-    }
     if (url.pathname === "/api/dtek-schedule") {
       if (request.method === "OPTIONS") return json({ ok: true });
       if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
@@ -795,32 +633,8 @@ export default {
         batteryPercent: snapshot.batteryPercent,
         cacheFetchedAt: snapshot.cacheFetchedAt
       });
-      if (String(env.TUYA_AUTO_CONTROL || "").toLowerCase() !== "true") return;
-      const ageMs = Date.now() - Number(snapshot.cacheFetchedAt);
-      const voltage = Number(snapshot.gridVoltageV);
-      const frequency = Number(snapshot.gridFrequencyHz);
-      if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > 90 * 1000 ||
-          !Number.isFinite(voltage) || !Number.isFinite(frequency)) {
-        console.warn("Tuya automation skipped: Deye telemetry is stale or incomplete.");
-        return;
-      }
-      const desired = voltage >= 180 && frequency >= 45 && frequency <= 55;
-      await env.DEYE_DB.prepare(
-        "CREATE TABLE IF NOT EXISTS tuya_automation_state (id INTEGER PRIMARY KEY CHECK(id = 1), candidate_state INTEGER, candidate_count INTEGER NOT NULL DEFAULT 0)"
-      ).run();
-      const row = await env.DEYE_DB.prepare("SELECT candidate_state, candidate_count FROM tuya_automation_state WHERE id = 1").first();
-      const desiredInt = desired ? 1 : 0;
-      const count = row && Number(row.candidate_state) === desiredInt ? Number(row.candidate_count || 0) + 1 : 1;
-      await env.DEYE_DB.prepare(
-        "INSERT INTO tuya_automation_state (id, candidate_state, candidate_count) VALUES (1, ?1, ?2) ON CONFLICT(id) DO UPDATE SET candidate_state = excluded.candidate_state, candidate_count = excluded.candidate_count"
-      ).bind(desiredInt, count).run();
-      if (count < 2) return;
-      const status = await fetchTuyaDeviceStatus(env);
-      if (status.switchState === null || status.switchState === desired) return;
-      await setTuyaSwitch(env, desired);
-      console.log("Tuya plug updated from Deye grid state", { enabled: desired });
-    }).catch(error => {
-      console.error("Scheduled Deye refresh or Tuya automation failed:", error);
+ => {
+      console.error("Scheduled Deye refresh failed:", error);
     }));
   }
 };

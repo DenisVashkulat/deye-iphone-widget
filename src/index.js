@@ -500,6 +500,43 @@ async function fetchTuyaDeviceStatus(env) {
   };
 }
 
+async function fetchTuyaDeviceInfo(env) {
+  const deviceId = env.TUYA_DEVICE_ID;
+  const encodedId = encodeURIComponent(deviceId);
+  const [deviceData, specData] = await Promise.all([
+    tuyaApiRequest(env, `/v1.0/iot-03/devices/${encodedId}`),
+    tuyaApiRequest(env, `/v1.0/iot-03/devices/${encodedId}/specification`)
+  ]);
+  const device = deviceData.result || {};
+  const spec = specData.result || {};
+  const safeFunction = item => ({
+    code: item.code ?? null,
+    type: item.type ?? null,
+    values: item.values ?? null
+  });
+  return {
+    ok: true,
+    configured: true,
+    deviceId,
+    device: {
+      name: device.name ?? null,
+      productId: device.product_id ?? null,
+      productName: device.product_name ?? null,
+      category: device.category ?? null,
+      model: device.model ?? null,
+      online: device.online ?? null
+    },
+    specification: {
+      category: spec.category ?? null,
+      functions: Array.isArray(spec.functions) ? spec.functions.map(safeFunction) : [],
+      status: Array.isArray(spec.status) ? spec.status.map(safeFunction) : []
+    },
+    note: "Tuya may not expose the plug's rated current or maximum power in this API response; confirm those from the manufacturer's label or documentation.",
+    checkedAt: new Date().toISOString(),
+    source: "Tuya Cloud device detail and specification"
+  };
+}
+
 async function fetchDtekSchedule() {
   const response = await fetch(
     "https://app.yasno.ua/api/blackout-service/public/shutdowns/regions/25/dsos/902/planned-outages",
@@ -695,6 +732,16 @@ export default {
       } catch (error) {
         console.error("Tuya device status error:", error);
         return json({ ok: false, error: error.message || "Could not load Tuya device status" }, 502);
+      }
+    }
+    if (url.pathname === "/api/tuya-info") {
+      if (request.method === "OPTIONS") return json({ ok: true });
+      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+      try {
+        return json(await fetchTuyaDeviceInfo(env));
+      } catch (error) {
+        console.error("Tuya device info error:", error);
+        return json({ ok: false, error: error.message || "Could not load Tuya device information" }, 502);
       }
     }
     if (url.pathname === "/api/dtek-schedule") {

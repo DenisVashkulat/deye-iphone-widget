@@ -503,12 +503,15 @@ async function fetchTuyaDeviceStatus(env) {
 async function fetchTuyaDeviceInfo(env) {
   const deviceId = env.TUYA_DEVICE_ID;
   const encodedId = encodeURIComponent(deviceId);
-  const [deviceData, specData] = await Promise.all([
+  const [deviceData, specData, statusData] = await Promise.all([
     tuyaApiRequest(env, `/v1.0/iot-03/devices/${encodedId}`),
-    tuyaApiRequest(env, `/v1.0/iot-03/devices/${encodedId}/specification`)
+    tuyaApiRequest(env, `/v1.0/iot-03/devices/${encodedId}/specification`),
+    tuyaApiRequest(env, `/v1.0/iot-03/devices/${encodedId}/status`)
   ]);
   const device = deviceData.result || {};
   const spec = specData.result || {};
+  const statusList = Array.isArray(statusData.result) ? statusData.result : [];
+  const status = Object.fromEntries(statusList.map(item => [item.code, item.value]));
   const safeFunction = item => ({
     code: item.code ?? null,
     type: item.type ?? null,
@@ -526,17 +529,26 @@ async function fetchTuyaDeviceInfo(env) {
       model: device.model ?? null,
       online: device.online ?? null
     },
+    liveStatus: {
+      switchState: typeof status.switch_1 === "boolean" ? status.switch_1 : null,
+      currentRaw: status.cur_current ?? null,
+      powerRaw: status.cur_power ?? null,
+      voltageRaw: status.cur_voltage ?? null,
+      energyRaw: status.add_ele ?? null,
+      fault: status.fault ?? null,
+      relayStatus: status.relay_status ?? null,
+      overchargeProtection: status.overcharge_switch ?? null
+    },
     specification: {
       category: spec.category ?? null,
       functions: Array.isArray(spec.functions) ? spec.functions.map(safeFunction) : [],
       status: Array.isArray(spec.status) ? spec.status.map(safeFunction) : []
     },
-    note: "Tuya may not expose the plug's rated current or maximum power in this API response; confirm those from the manufacturer's label or documentation.",
+    note: "Live measurements are telemetry, not the plug's rated limits. Tuya API does not confirm the maximum safe load; verify it from manufacturer documentation.",
     checkedAt: new Date().toISOString(),
-    source: "Tuya Cloud device detail and specification"
+    source: "Tuya Cloud device detail, specification and live status"
   };
 }
-
 async function fetchDtekSchedule() {
   const response = await fetch(
     "https://app.yasno.ua/api/blackout-service/public/shutdowns/regions/25/dsos/902/planned-outages",

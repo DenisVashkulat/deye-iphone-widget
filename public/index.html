@@ -39,6 +39,22 @@
     .chart-empty{height:180px;display:grid;place-items:center;color:var(--muted);font-size:13px}
     @media(max-width:850px){.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}.cols2{grid-template-columns:1fr}.chart-grid{grid-template-columns:1fr}.top{align-items:flex-start}.flow{max-width:650px;margin:auto}}
     @media(max-width:520px){body{padding:15px 11px 28px}.top{display:block}.top-right{justify-content:flex-start;margin-top:12px}.logo{width:45px;height:45px}.metric{padding:14px;min-height:119px}.metric-icon{width:34px;height:34px}.grid4{gap:9px}.metric-value{font-size:27px}.panel{padding:15px;border-radius:16px}.panel-title{font-size:16px}.grid-state{gap:13px;min-height:112px}.state-mark{width:65px;height:65px;font-size:34px;border-width:6px}.state-name{font-size:23px}.flow{grid-template-columns:1fr 28px 1fr 28px 1fr;gap:0}.flow-symbol{font-size:27px}.flow-center{width:50px;height:50px;font-size:12px}.flow-node strong{font-size:16px}.flow-node small{font-size:11px}.arrow{font-size:19px}.flow-extra{gap:12px}.range button{padding:7px 12px}.stats3{gap:5px}.stat strong{font-size:22px}}
+
+    .dtek-meta{display:flex;flex-wrap:wrap;gap:8px 14px;color:var(--muted);font-size:12px;margin-top:-4px;margin-bottom:16px}
+    .dtek-days{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .dtek-day{background:#111d30;border:1px solid #293a55;border-radius:13px;padding:13px}
+    .dtek-day-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:10px}
+    .dtek-day-head strong{font-size:14px}.dtek-day-head span{font-size:11px;color:var(--muted)}
+    .dtek-timeline{display:flex;height:13px;overflow:hidden;border-radius:8px;background:#26364f}
+    .dtek-slot{height:100%;min-width:1px}.dtek-slot.off{background:#f06b76}.dtek-slot.on{background:#32c987}
+    .dtek-legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:9px;color:var(--muted);font-size:11px}
+    .dtek-legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
+    .dtek-intervals{display:flex;flex-wrap:wrap;gap:6px;margin-top:11px}
+    .dtek-chip{font-size:11px;border-radius:7px;padding:5px 7px;background:#25334a;color:#d8e2f0}
+    .dtek-chip.off{background:#482832;color:#ffc4c8}.dtek-chip.on{background:#173d35;color:#a6f0d0}
+    .dtek-status{margin-top:14px;padding:10px 12px;border-radius:10px;background:#17263b;font-size:13px;line-height:1.45}
+    .dtek-status.off{border-left:3px solid var(--red)}.dtek-status.on{border-left:3px solid var(--green)}
+    @media(max-width:600px){.dtek-days{grid-template-columns:1fr}}
   </style>
 </head>
 <body><main>
@@ -91,6 +107,13 @@
   <section class="panel">
     <div class="panel-title"><span class="ico">♧</span> Останні події</div>
     <div class="event-list" id="event-list"><div class="empty">Поки немає подій</div></div>
+  </section>
+  <section class="panel" id="dtek-panel">
+    <div class="panel-title"><span class="ico">⚡</span> Графік відключень ДТЕК</div>
+    <div class="dtek-meta"><span>Академіка Заболотного, 58 · Київ</span><span>Група 29.1</span><span id="dtek-updated">Оновлюємо графік…</span></div>
+    <div class="dtek-days" id="dtek-days"><div class="empty">Завантажуємо графік відключень…</div></div>
+    <div class="dtek-status" id="dtek-current">Перевіряємо поточний статус…</div>
+    <div class="dtek-legend"><span><i style="background:#32c987"></i>Світло за графіком є</span><span><i style="background:#f06b76"></i>Планове відключення</span></div>
   </section>
 </main>
 <script>
@@ -239,6 +262,57 @@ function renderHistory(data){
   }
   el("event-list").innerHTML=renderEvents(events);
 }
+function dtekTime(minute){
+  const h=String(Math.floor(minute/60)).padStart(2,"0");
+  const m=String(minute%60).padStart(2,"0");
+  return h+":"+m;
+}
+function dtekRenderDay(label, day){
+  if(!day || !Array.isArray(day.slots)) return '<div class="dtek-day"><div class="empty">Графік недоступний</div></div>';
+  const slots=day.slots;
+  const timeline=slots.map(slot=>{
+    const outage=slot.type==="Definite";
+    const width=Math.max(0,Number(slot.end)-Number(slot.start))/1440*100;
+    return '<span class="dtek-slot '+(outage?'off':'on')+'" style="width:'+width+'%" title="'+dtekTime(slot.start)+'–'+dtekTime(slot.end)+' · '+(outage?'Відключення':'Світло є')+'"></span>';
+  }).join("");
+  const chips=slots.map(slot=>{
+    const outage=slot.type==="Definite";
+    return '<span class="dtek-chip '+(outage?'off':'on')+'">'+dtekTime(slot.start)+'–'+dtekTime(slot.end)+' '+(outage?'немає світла':'світло є')+'</span>';
+  }).join("");
+  const date=day.date?new Date(day.date).toLocaleDateString("uk-UA",{day:"2-digit",month:"long"}):"";
+  return '<div class="dtek-day"><div class="dtek-day-head"><strong>'+label+'</strong><span>'+date+'</span></div><div class="dtek-timeline">'+timeline+'</div><div class="dtek-intervals">'+chips+'</div></div>';
+}
+function renderDtekSchedule(data){
+  const days=el("dtek-days");
+  days.innerHTML=dtekRenderDay("Сьогодні",data.today)+dtekRenderDay("Завтра",data.tomorrow);
+  el("dtek-updated").textContent=data.updatedOn
+    ?"Оновлено: "+new Date(data.updatedOn).toLocaleString("uk-UA",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})
+    :"Час оновлення невідомий";
+  const now=new Date();
+  const kyivParts=new Intl.DateTimeFormat("en-GB",{timeZone:"Europe/Kyiv",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(now);
+  const part=name=>Number(kyivParts.find(p=>p.type===name)?.value||0);
+  const minute=part("hour")*60+part("minute");
+  const todaySlots=data.today?.slots||[];
+  const current=todaySlots.find(slot=>minute>=slot.start&&minute<slot.end);
+  const status=el("dtek-current");
+  if(!current){status.className="dtek-status";status.textContent="Поточний інтервал не визначений. Перевірте оновлення графіка.";return;}
+  const isOff=current.type==="Definite";
+  const next=todaySlots.find(slot=>slot.start>=current.end);
+  status.className="dtek-status "+(isOff?"off":"on");
+  status.textContent=(isOff?"За графіком зараз планове відключення":"За графіком зараз електропостачання має бути")+
+    (next?" · наступна зміна о "+dtekTime(current.end):" · до кінця доби");
+}
+async function refreshDtekSchedule(){
+  try{
+    const response=await fetch("/api/dtek-schedule",{cache:"no-store"});
+    const data=await response.json();
+    if(!response.ok||!data.ok)throw new Error(data.error||"Не вдалося отримати графік");
+    renderDtekSchedule(data);
+  }catch(error){
+    el("dtek-days").innerHTML='<div class="empty error">Не вдалося завантажити графік ДТЕК: '+String(error.message).replace(/[<>]/g,"")+'</div>';
+    el("dtek-current").textContent="Графік тимчасово недоступний.";
+  }
+}
 async function refreshStatus(){
   try{
     const response=await fetch("/api/status",{cache:"no-store"});
@@ -273,6 +347,8 @@ document.querySelectorAll("[data-range]").forEach(button=>{
 });
 refreshStatus();
 refreshHistory(currentRange);
+refreshDtekSchedule();
+setInterval(refreshDtekSchedule,5*60*1000);
 setInterval(refreshStatus,15000);
 setInterval(updateRuntime,1000);
 </script></body></html>

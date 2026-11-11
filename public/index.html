@@ -54,6 +54,8 @@
     .dtek-chip.off{background:#482832;color:#ffc4c8}.dtek-chip.on{background:#173d35;color:#a6f0d0}
     .dtek-status{margin-top:14px;padding:10px 12px;border-radius:10px;background:#17263b;font-size:13px;line-height:1.45}
     .dtek-status.off{border-left:3px solid var(--red)}.dtek-status.on{border-left:3px solid var(--green)}
+    .dtek-address-card{padding:13px 14px;border:1px solid #293a55;border-radius:12px;background:#111d30;color:#dce7f6;white-space:pre-line;line-height:1.55;font-size:13px}
+    .dtek-address-card.emergency{border-left:3px solid var(--red)}.dtek-address-card.planned{border-left:3px solid var(--yellow)}.dtek-address-card.none{border-left:3px solid var(--green)}.dtek-address-card.error{border-left:3px solid var(--yellow);color:#f2d99a}
     @media(max-width:600px){.dtek-days{grid-template-columns:1fr}}
   </style>
 </head>
@@ -114,6 +116,11 @@
     <div class="dtek-days" id="dtek-days"><div class="empty">Завантажуємо графік відключень…</div></div>
     <div class="dtek-status" id="dtek-current">Перевіряємо поточний статус…</div>
     <div class="dtek-legend"><span><i style="background:#32c987"></i>Світло за графіком є</span><span><i style="background:#f06b76"></i>Планове відключення</span></div>
+  </section>
+  <section class="panel" id="dtek-address-panel">
+    <div class="panel-title"><span class="ico">⚠</span> Адресні та аварійні відключення ДТЕК</div>
+    <div class="dtek-meta"><span>Академіка Заболотного, 58 · ввід 1</span><span id="dtek-address-updated">Перевіряємо адресу…</span></div>
+    <div class="dtek-address-card" id="dtek-address-status">Завантажуємо адресну інформацію ДТЕК…</div>
   </section>
 </main>
 <script>
@@ -313,6 +320,42 @@ async function refreshDtekSchedule(){
     el("dtek-current").textContent="Графік тимчасово недоступний.";
   }
 }
+function renderDtekAddress(data){
+  const box=el("dtek-address-status");
+  const updated=el("dtek-address-updated");
+  if(!data.configured){
+    box.className="dtek-address-card error";
+    box.textContent=data.message||"Адресне джерело ДТЕК ще не налаштовано.";
+    updated.textContent="Очікує налаштування";
+    return;
+  }
+  updated.textContent=data.updatedAt?"Оновлено ДТЕК: "+data.updatedAt:"Час оновлення невідомий";
+  if(!data.active){
+    box.className="dtek-address-card none";
+    box.textContent="За даними адресного запиту ДТЕК, окреме повідомлення про роботи або відключення для будинку 58 зараз не опубліковане. Це не замінює фактичну перевірку наявності світла інвертором.";
+    return;
+  }
+  box.className="dtek-address-card "+(data.kind||"");
+  const title=data.kind==="emergency"?"Аварійне / екстрене відключення"
+    :data.kind==="planned"?"Планові роботи / відключення":"Повідомлення ДТЕК про відключення";
+  const lines=[title,data.reason||"Причина не уточнена"];
+  if(data.startAt)lines.push("Початок: "+data.startAt);
+  if(data.expectedEndAt)lines.push("Очікуване відновлення: "+data.expectedEndAt);
+  if(data.groups?.length)lines.push("Група(и) адреси: "+data.groups.join(", "));
+  box.textContent=lines.join("\\n");
+}
+async function refreshDtekAddress(){
+  try{
+    const response=await fetch("/api/dtek-address",{cache:"no-store"});
+    const data=await response.json();
+    if(!response.ok||!data.ok)throw new Error(data.error||"Не вдалося отримати адресні дані ДТЕК");
+    renderDtekAddress(data);
+  }catch(error){
+    el("dtek-address-status").className="dtek-address-card error";
+    el("dtek-address-status").textContent="Адресні дані ДТЕК тимчасово недоступні: "+String(error.message).replace(/[<>]/g,"");
+    el("dtek-address-updated").textContent="Не вдалося оновити";
+  }
+}
 async function refreshStatus(){
   try{
     const response=await fetch("/api/status",{cache:"no-store"});
@@ -348,7 +391,9 @@ document.querySelectorAll("[data-range]").forEach(button=>{
 refreshStatus();
 refreshHistory(currentRange);
 refreshDtekSchedule();
+refreshDtekAddress();
 setInterval(refreshDtekSchedule,5*60*1000);
+setInterval(refreshDtekAddress,5*60*1000);
 setInterval(refreshStatus,15000);
 setInterval(updateRuntime,1000);
 </script></body></html>

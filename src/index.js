@@ -628,12 +628,12 @@ export default {
   },
 
   async scheduled(controller, env, ctx) {
-    ctx.waitUntil(fetchSnapshot(env).then(async snapshot => {
+    ctx.waitUntil(fetchSnapshot(env).then(snapshot => {
       console.log("Deye snapshot refreshed", {
         batteryPercent: snapshot.batteryPercent,
         cacheFetchedAt: snapshot.cacheFetchedAt
       });
- => {
+    }).catch(error => {
       console.error("Scheduled Deye refresh failed:", error);
     }));
   }

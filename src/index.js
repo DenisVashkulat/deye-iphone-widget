@@ -407,6 +407,26 @@ async function fetchDeviceAlerts(env) {
   };
 }
 
+async function fetchDtekSchedule() {
+  const response = await fetch(
+    "https://app.yasno.ua/api/blackout-service/public/shutdowns/regions/25/dsos/902/planned-outages",
+    { headers: { "Accept": "application/json" }, cf: { cacheTtl: 300, cacheEverything: true } }
+  );
+  if (!response.ok) throw new Error(`YASNO schedule request failed: HTTP ${response.status}`);
+  const data = await response.json();
+  const group = data["29.1"];
+  if (!group) throw new Error("Schedule for group 29.1 was not found.");
+  return {
+    ok: true,
+    group: "29.1",
+    address: "м. Київ, вул. Академіка Заболотного, 58 (ввід 1)",
+    today: group.today || null,
+    tomorrow: group.tomorrow || null,
+    updatedOn: group.updatedOn || null,
+    source: "YASNO public outage schedule"
+  };
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -461,6 +481,16 @@ export default {
       } catch (error) {
         console.error("Deye analytics history error:", error);
         return json({ error: error.message || "Unknown server error" }, 500);
+      }
+    }
+    if (url.pathname === "/api/dtek-schedule") {
+      if (request.method === "OPTIONS") return json({ ok: true });
+      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+      try {
+        return json(await fetchDtekSchedule());
+      } catch (error) {
+        console.error("DTEK schedule error:", error);
+        return json({ error: error.message || "Could not load DTEK schedule" }, 502);
       }
     }
     if (url.pathname === "/api/status") {

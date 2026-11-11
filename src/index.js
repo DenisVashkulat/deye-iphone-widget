@@ -484,7 +484,8 @@ async function fetchDtekAddressStatus(env) {
       hasData: Boolean(payload?.data),
       dataType: Array.isArray(payload?.data) ? "array" : typeof payload?.data,
       topLevelKeys: payload && typeof payload === "object" ? Object.keys(payload).slice(0, 12) : [],
-      rawLength: rawText.length
+      rawLength: rawText.length,
+      dtekMessage: String(payload?.text || "").replace(/<[^>]*>/g, " ").replace(/\\s+/g, " ").trim().slice(0, 300)
     };
     throw new Error("Відповідь AJAX ДТЕК не містить списку будинків: " + JSON.stringify(diagnostic));
   }

@@ -474,13 +474,13 @@ async function fetchDtekAddressStatus(env) {
     throw new Error("ДТЕК повернув не JSON. Можливо, сесія застаріла або сайт показав захист від автоматичних запитів.");
   }
 
-  if (!payload || payload.result === false || !payload.data) {
-    throw new Error("ДТЕК не повернув дані адреси. Перевірте актуальність сесії та назву вулиці.");
+  if (!payload || payload.result !== true || !payload.data || typeof payload.data !== "object") {
+    throw new Error("ДТЕК не повернув коректний список будинків. Перевірте сесію та відповідь AJAX.");
   }
 
   const house = payload.data["58"];
   if (!house) {
-    throw new Error("Будинок 58 не знайдено у відповіді ДТЕК для цієї вулиці.");
+    throw new Error("У списку ДТЕК немає будинку 58. Перевірте вибрану вулицю.");
   }
 
   const reason = String(house.sub_type || "").trim();
@@ -503,6 +503,8 @@ async function fetchDtekAddressStatus(env) {
     entrance: "1",
     groups,
     active,
+    addressSpecific: active,
+    fallbackGroup: !active && groups.includes("GPV29.1") ? "29.1" : null,
     kind,
     reason: reason || (active ? "ДТЕК повідомляє про роботи/відключення без уточненої причини" : ""),
     startAt: startAt || null,

@@ -332,7 +332,11 @@ function renderDtekAddress(data){
   updated.textContent=data.updatedAt?"Оновлено ДТЕК: "+data.updatedAt:"Час оновлення невідомий";
   if(!data.active){
     box.className="dtek-address-card none";
-    box.textContent="За даними адресного запиту ДТЕК, окреме повідомлення про роботи або відключення для будинку 58 зараз не опубліковане. Це не замінює фактичну перевірку наявності світла інвертором.";
+    const group=data.fallbackGroup||((data.groups||[]).includes("GPV29.1")?"29.1":null);
+    box.textContent=group
+      ?"Окреме аварійне або адресне відключення для будинку 58 зараз не опубліковане. Для планових відключень використовуємо графік групи "+group+" — він показаний у блоці графіка нижче. Фактичну наявність світла перевіряє інвертор."
+      :"Окреме повідомлення про відключення для будинку 58 зараз не опубліковане. Це не замінює фактичну перевірку наявності світла інвертором.";
+    if(data.groups?.length)box.textContent+=" Група адреси: "+data.groups.join(", ")+".";
     return;
   }
   box.className="dtek-address-card "+(data.kind||"");

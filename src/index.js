@@ -474,8 +474,19 @@ async function fetchDtekAddressStatus(env) {
     throw new Error("ДТЕК повернув не JSON. Можливо, сесія застаріла або сайт показав захист від автоматичних запитів.");
   }
 
-  if (!payload || payload.result !== true || !payload.data || typeof payload.data !== "object") {
-    throw new Error("ДТЕК не повернув коректний список будинків. Перевірте сесію та відповідь AJAX.");
+  const hasHouseMap = Boolean(payload && payload.data && typeof payload.data === "object" && !Array.isArray(payload.data));
+  const resultAccepted = payload && (payload.result === true || payload.result === "true" || payload.result === 1);
+  if (!payload || !hasHouseMap || (payload.result === false && !hasHouseMap)) {
+    const diagnostic = {
+      httpStatus: response.status,
+      result: payload?.result ?? null,
+      resultType: typeof payload?.result,
+      hasData: Boolean(payload?.data),
+      dataType: Array.isArray(payload?.data) ? "array" : typeof payload?.data,
+      topLevelKeys: payload && typeof payload === "object" ? Object.keys(payload).slice(0, 12) : [],
+      rawLength: rawText.length
+    };
+    throw new Error("Відповідь AJAX ДТЕК не містить списку будинків: " + JSON.stringify(diagnostic));
   }
 
   const house = payload.data["58"];

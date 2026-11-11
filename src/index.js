@@ -407,6 +407,80 @@ async function fetchDeviceAlerts(env) {
   };
 }
 
+async function tuyaHmac(message, secret) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
+  return [...new Uint8Array(signature)].map(byte => byte.toString(16).padStart(2, "0")).join("").toUpperCase();
+}
+
+async function tuyaApiRequest(env, path) {
+  const accessId = env.TUYA_ACCESS_ID;
+  const accessSecret = env.TUYA_ACCESS_SECRET;
+  if (!accessId || !accessSecret || !env.TUYA_DEVICE_ID) {
+    throw new Error("Tuya secrets are incomplete. Check TUYA_ACCESS_ID, TUYA_ACCESS_SECRET and TUYA_DEVICE_ID.");
+  }
+
+  const baseUrl = env.TUYA_API_BASE_URL || "https://openapi.tuyaeu.com";
+  const tokenTime = Date.now().toString();
+  const tokenSign = await tuyaHmac(accessId + tokenTime, accessSecret);
+  const tokenResponse = await fetch(`${baseUrl}/v1.0/token?grant_type=1`, {
+    method: "GET",
+    headers: {
+      client_id: accessId,
+      sign: tokenSign,
+      sign_method: "HMAC-SHA256",
+      t: tokenTime
+    }
+  });
+  const tokenData = await tokenResponse.json();
+  if (!tokenResponse.ok || tokenData.success !== true || !tokenData.result?.access_token) {
+    throw new Error(`Tuya authorization failed: ${tokenData.msg || "token was not returned"} (code ${tokenData.code ?? tokenResponse.status})`);
+  }
+
+  const accessToken = tokenData.result.access_token;
+  const requestTime = Date.now().toString();
+  const requestSign = await tuyaHmac(accessId + accessToken + requestTime, accessSecret);
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: "GET",
+    headers: {
+      client_id: accessId,
+      access_token: accessToken,
+      sign: requestSign,
+      sign_method: "HMAC-SHA256",
+      t: requestTime,
+      Accept: "application/json"
+    }
+  });
+  const data = await response.json();
+  if (!response.ok || data.success !== true) {
+    throw new Error(`Tuya API request failed: ${data.msg || "unknown error"} (code ${data.code ?? response.status})`);
+  }
+  return data;
+}
+
+async function fetchTuyaDeviceStatus(env) {
+  const deviceId = env.TUYA_DEVICE_ID;
+  const data = await tuyaApiRequest(env, `/v1.0/iot-03/devices/${encodeURIComponent(deviceId)}/status`);
+  const statusList = Array.isArray(data.result) ? data.result : [];
+  const switchPoint = statusList.find(point => point.code === "switch_1");
+  return {
+    ok: true,
+    configured: true,
+    deviceId,
+    switchCode: "switch_1",
+    switchState: typeof switchPoint?.value === "boolean" ? switchPoint.value : null,
+    statusAvailable: Boolean(switchPoint),
+    checkedAt: new Date().toISOString(),
+    source: "Tuya Cloud device status"
+  };
+}
+
 async function fetchDtekSchedule() {
   const response = await fetch(
     "https://app.yasno.ua/api/blackout-service/public/shutdowns/regions/25/dsos/902/planned-outages",
@@ -592,6 +666,16 @@ export default {
       } catch (error) {
         console.error("Deye analytics history error:", error);
         return json({ error: error.message || "Unknown server error" }, 500);
+      }
+    }
+    if (url.pathname === "/api/tuya-status") {
+      if (request.method === "OPTIONS") return json({ ok: true });
+      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+      try {
+        return json(await fetchTuyaDeviceStatus(env));
+      } catch (error) {
+        console.error("Tuya device status error:", error);
+        return json({ ok: false, error: error.message || "Could not load Tuya device status" }, 502);
       }
     }
     if (url.pathname === "/api/dtek-schedule") {

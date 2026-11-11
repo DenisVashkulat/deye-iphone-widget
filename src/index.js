@@ -419,24 +419,46 @@ async function tuyaHmac(message, secret) {
   return [...new Uint8Array(signature)].map(byte => byte.toString(16).padStart(2, "0")).join("").toUpperCase();
 }
 
-async function tuyaApiRequest(env, path) {
-  const accessId = env.TUYA_ACCESS_ID;
-  const accessSecret = env.TUYA_ACCESS_SECRET;
-  if (!accessId || !accessSecret || !env.TUYA_DEVICE_ID) {
+async function tuyaSha256(value) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function tuyaSignedHeaders(env, path, accessToken = "") {
+  const clientId = env.TUYA_ACCESS_ID;
+  const secret = env.TUYA_ACCESS_SECRET;
+  if (!clientId || !secret || !env.TUYA_DEVICE_ID) {
     throw new Error("Tuya secrets are incomplete. Check TUYA_ACCESS_ID, TUYA_ACCESS_SECRET and TUYA_DEVICE_ID.");
   }
 
+  const timestamp = Date.now().toString();
+  const nonce = crypto.randomUUID().replace(/-/g, "");
+  const method = "GET";
+  const contentHash = await tuyaSha256("");
+  const stringToSign = [method, contentHash, "", path].join("\n");
+  const signInput = accessToken
+    ? clientId + accessToken + timestamp + nonce + stringToSign
+    : clientId + timestamp + nonce + stringToSign;
+  const sign = await tuyaHmac(signInput, secret);
+
+  const headers = {
+    client_id: clientId,
+    sign,
+    sign_method: "HMAC-SHA256",
+    t: timestamp,
+    nonce,
+    Accept: "application/json"
+  };
+  if (accessToken) headers.access_token = accessToken;
+  return headers;
+}
+
+async function tuyaApiRequest(env, path) {
   const baseUrl = env.TUYA_API_BASE_URL || "https://openapi.tuyaeu.com";
-  const tokenTime = Date.now().toString();
-  const tokenSign = await tuyaHmac(accessId + tokenTime, accessSecret);
-  const tokenResponse = await fetch(`${baseUrl}/v1.0/token?grant_type=1`, {
+  const tokenPath = "/v1.0/token?grant_type=1";
+  const tokenResponse = await fetch(`${baseUrl}${tokenPath}`, {
     method: "GET",
-    headers: {
-      client_id: accessId,
-      sign: tokenSign,
-      sign_method: "HMAC-SHA256",
-      t: tokenTime
-    }
+    headers: await tuyaSignedHeaders(env, tokenPath)
   });
   const tokenData = await tokenResponse.json();
   if (!tokenResponse.ok || tokenData.success !== true || !tokenData.result?.access_token) {
@@ -444,18 +466,9 @@ async function tuyaApiRequest(env, path) {
   }
 
   const accessToken = tokenData.result.access_token;
-  const requestTime = Date.now().toString();
-  const requestSign = await tuyaHmac(accessId + accessToken + requestTime, accessSecret);
   const response = await fetch(`${baseUrl}${path}`, {
     method: "GET",
-    headers: {
-      client_id: accessId,
-      access_token: accessToken,
-      sign: requestSign,
-      sign_method: "HMAC-SHA256",
-      t: requestTime,
-      Accept: "application/json"
-    }
+    headers: await tuyaSignedHeaders(env, path, accessToken)
   });
   const data = await response.json();
   if (!response.ok || data.success !== true) {

@@ -42,3 +42,17 @@ Official limits:
 - https://developers.cloudflare.com/d1/platform/pricing/
 
 This branch is a migration draft; do not switch the live iPhone widget until the Worker is deployed and tested.
+
+
+## DTEK address-level outage notices (Kyiv)
+
+The dashboard has a separate address-level endpoint for **м. Київ, вул. Академіка Заболотного, 58 (ввід 1)**. It reads the house entry from DTEK Kyiv Electric Networks' AJAX response, including the published reason, start time and estimated end time where available. This is separate from the YASNO planned schedule for group 29.1 and from the inverter's actual grid status.
+
+The DTEK website may require a valid browser session because of its anti-bot protection. Configure these as **Worker Secrets** (never commit them):
+
+- `DTEK_SESSION_COOKIE` — the complete Cookie header value from a valid session on `https://www.dtek-kem.com.ua/ua/shutdowns` (cookie names and values joined with `; `).
+- `DTEK_CSRF_TOKEN` — the page's `meta[name="csrf-token"]` value from the same session.
+
+Do not paste these values into chat or GitHub. Add them in Cloudflare Dashboard → Workers & Pages → your Worker → Settings → Variables and Secrets → Add secret. The session may expire; if the endpoint reports a WAF/session error, refresh both secrets together. The dashboard reports unavailable data rather than treating a failed request as “no outage”.
+
+The address endpoint is polled by the page every 5 minutes. The entrance is shown as address metadata; DTEK's returned outage record is at house-number level, not separately per entrance.

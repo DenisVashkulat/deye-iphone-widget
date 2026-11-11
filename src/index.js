@@ -427,6 +427,92 @@ async function fetchDtekSchedule() {
   };
 }
 
+
+async function fetchDtekAddressStatus(env) {
+  const cookie = env.DTEK_SESSION_COOKIE;
+  const csrfToken = env.DTEK_CSRF_TOKEN;
+  if (!cookie || !csrfToken) {
+    return {
+      ok: true,
+      configured: false,
+      address: "м. Київ, вул. Академіка Заболотного, 58 (ввід 1)",
+      message: "Адресний запит ДТЕК ще не налаштовано. Потрібні DTEK_SESSION_COOKIE та DTEK_CSRF_TOKEN у Cloudflare Worker Secrets."
+    };
+  }
+
+  const form = new URLSearchParams();
+  form.set("method", "getHomeNum");
+  form.set("data[0][name]", "city");
+  form.set("data[0][value]", "м. Київ");
+  form.set("data[1][name]", "street");
+  form.set("data[1][value]", "вул. Академіка Заболотного");
+
+  const response = await fetch("https://www.dtek-kem.com.ua/ua/ajax", {
+    method: "POST",
+    headers: {
+      "Accept": "application/json, text/javascript, */*; q=0.01",
+      "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "X-Requested-With": "XMLHttpRequest",
+      "X-CSRF-Token": csrfToken,
+      "Cookie": cookie,
+      "Origin": "https://www.dtek-kem.com.ua",
+      "Referer": "https://www.dtek-kem.com.ua/ua/shutdowns",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
+    },
+    body: form.toString()
+  });
+
+  const rawText = await response.text();
+  if (!response.ok) {
+    throw new Error(`DTEK address request failed: HTTP ${response.status}`);
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(rawText);
+  } catch {
+    throw new Error("ДТЕК повернув не JSON. Можливо, сесія застаріла або сайт показав захист від автоматичних запитів.");
+  }
+
+  if (!payload || payload.result === false || !payload.data) {
+    throw new Error("ДТЕК не повернув дані адреси. Перевірте актуальність сесії та назву вулиці.");
+  }
+
+  const house = payload.data["58"];
+  if (!house) {
+    throw new Error("Будинок 58 не знайдено у відповіді ДТЕК для цієї вулиці.");
+  }
+
+  const reason = String(house.sub_type || "").trim();
+  const startAt = String(house.start_date || "").trim();
+  const expectedEndAt = String(house.end_date || "").trim();
+  const outageType = String(house.type || "").trim();
+  const groups = Array.isArray(house.sub_type_reason) ? house.sub_type_reason.map(String) : [];
+  const active = Boolean(reason || startAt || expectedEndAt || outageType);
+  const normalized = reason.toLocaleLowerCase("uk-UA");
+  let kind = "none";
+  if (active && /(аварійн|екстрен|невідклад)/i.test(normalized)) kind = "emergency";
+  else if (active && (outageType === "1" || /планов/i.test(normalized))) kind = "planned";
+  else if (active) kind = "other";
+
+  return {
+    ok: true,
+    configured: true,
+    address: "м. Київ, вул. Академіка Заболотного, 58 (ввід 1)",
+    houseNumber: "58",
+    entrance: "1",
+    groups,
+    active,
+    kind,
+    reason: reason || (active ? "ДТЕК повідомляє про роботи/відключення без уточненої причини" : ""),
+    startAt: startAt || null,
+    expectedEndAt: expectedEndAt || null,
+    outageType: outageType || null,
+    updatedAt: payload.updateTimestamp || null,
+    source: "DTEK Kyiv Electric Networks address AJAX"
+  };
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -438,7 +524,9 @@ export default {
           DEYE_EMAIL: Boolean(env.DEYE_EMAIL),
           DEYE_PASSWORD: Boolean(env.DEYE_PASSWORD),
           DEYE_STATION_ID: Boolean(env.DEYE_STATION_ID),
-          DEYE_DEVICE_SN: Boolean(env.DEYE_DEVICE_SN)
+          DEYE_DEVICE_SN: Boolean(env.DEYE_DEVICE_SN),
+          DTEK_SESSION_COOKIE: Boolean(env.DTEK_SESSION_COOKIE),
+          DTEK_CSRF_TOKEN: Boolean(env.DTEK_CSRF_TOKEN)
         },
         note: "Only presence is reported; secret values are never returned."
       });
@@ -491,6 +579,16 @@ export default {
       } catch (error) {
         console.error("DTEK schedule error:", error);
         return json({ error: error.message || "Could not load DTEK schedule" }, 502);
+      }
+    }
+    if (url.pathname === "/api/dtek-address") {
+      if (request.method === "OPTIONS") return json({ ok: true });
+      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+      try {
+        return json(await fetchDtekAddressStatus(env));
+      } catch (error) {
+        console.error("DTEK address status error:", error);
+        return json({ ok: false, error: error.message || "Could not load DTEK address status" }, 502);
       }
     }
     if (url.pathname === "/api/status") {

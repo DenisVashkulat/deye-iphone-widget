@@ -442,10 +442,19 @@ async function fetchDtekAddressStatus(env) {
 
   const form = new URLSearchParams();
   form.set("method", "getHomeNum");
-  form.set("data[0][name]", "city");
-  form.set("data[0][value]", "м. Київ");
-  form.set("data[1][name]", "street");
-  form.set("data[1][value]", "вул. Академіка Заболотного");
+  form.set("data[0][name]", "street");
+  form.set("data[0][value]", "вул. Заболотного Академіка");
+  const kyivNow = new Date().toLocaleString("en-GB", {
+    timeZone: "Europe/Kyiv",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  });
+  form.set("data[1][name]", "updateFact");
+  form.set("data[1][value]", kyivNow);
 
   const response = await fetch("https://www.dtek-kem.com.ua/ua/ajax", {
     method: "POST",

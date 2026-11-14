@@ -116,6 +116,70 @@ function getGridTransitions(points, previous) {
 }
 
 
+async function ensureBmsHistoryTable(env) {
+  await env.DEYE_DB.prepare(
+    "CREATE TABLE IF NOT EXISTS bms_samples (" +
+    "sampled_at INTEGER PRIMARY KEY, soc REAL, bms_soc REAL, battery_voltage REAL, " +
+    "bms_voltage REAL, battery_current REAL, bms_current REAL, battery_power REAL, " +
+    "bms_temperature REAL, charge_current_limit REAL, discharge_current_limit REAL, " +
+    "bms_charge_voltage REAL)"
+  ).run();
+}
+
+function numericPoint(points, key) {
+  if (!Object.prototype.hasOwnProperty.call(points, key)) return null;
+  const value = Number(points[key]);
+  return Number.isFinite(value) ? value : null;
+}
+
+async function saveBmsHistorySample(env, points, sampledAt) {
+  await ensureBmsHistoryTable(env);
+  const values = {
+    soc: numericPoint(points, "SOC"),
+    bms_soc: numericPoint(points, "BMSSOC"),
+    battery_voltage: numericPoint(points, "BatteryVoltage"),
+    bms_voltage: numericPoint(points, "BMSVoltage"),
+    battery_current: numericPoint(points, "BatteryCurrent"),
+    bms_current: numericPoint(points, "BMSCurrent"),
+    battery_power: numericPoint(points, "BatteryPower"),
+    bms_temperature: numericPoint(points, "BMSTemperature"),
+    charge_current_limit: numericPoint(points, "ChargeCurrentLimit"),
+    discharge_current_limit: numericPoint(points, "DischargeCurrentLimit"),
+    bms_charge_voltage: numericPoint(points, "BMSChargeVoltage")
+  };
+  if (!Object.values(values).some(value => value !== null)) return;
+
+  const minute = Math.floor(Number(sampledAt) / 60000) * 60000;
+  await env.DEYE_DB.prepare(
+    "INSERT OR REPLACE INTO bms_samples " +
+    "(sampled_at, soc, bms_soc, battery_voltage, bms_voltage, battery_current, bms_current, " +
+    "battery_power, bms_temperature, charge_current_limit, discharge_current_limit, bms_charge_voltage) " +
+    "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)"
+  ).bind(
+    minute, values.soc, values.bms_soc, values.battery_voltage, values.bms_voltage,
+    values.battery_current, values.bms_current, values.battery_power, values.bms_temperature,
+    values.charge_current_limit, values.discharge_current_limit, values.bms_charge_voltage
+  ).run();
+
+  if (new Date(Number(sampledAt)).getMinutes() === 0) {
+    await env.DEYE_DB.prepare("DELETE FROM bms_samples WHERE sampled_at < ?1")
+      .bind(Number(sampledAt) - 30 * 24 * 60 * 60 * 1000).run();
+  }
+}
+
+async function fetchBmsHistory(env, requestedRange = "24h") {
+  await ensureBmsHistoryTable(env);
+  const ranges = { "1h": 60 * 60 * 1000, "24h": 24 * 60 * 60 * 1000, "7d": 7 * 24 * 60 * 60 * 1000, "30d": 30 * 24 * 60 * 60 * 1000 };
+  const range = Object.prototype.hasOwnProperty.call(ranges, requestedRange) ? requestedRange : "24h";
+  const now = Date.now();
+  const result = await env.DEYE_DB.prepare(
+    "SELECT sampled_at, soc, bms_soc, battery_voltage, bms_voltage, battery_current, bms_current, " +
+    "battery_power, bms_temperature, charge_current_limit, discharge_current_limit, bms_charge_voltage " +
+    "FROM bms_samples WHERE sampled_at >= ?1 AND sampled_at <= ?2 ORDER BY sampled_at ASC LIMIT 43200"
+  ).bind(now - ranges[range], now).all();
+  return { range, from: now - ranges[range], to: now, sampleInterval: "1 minute", samples: result.results || [] };
+}
+
 async function ensureAnalyticsTables(env) {
   await env.DEYE_DB.prepare(
     "CREATE TABLE IF NOT EXISTS battery_samples (" +
@@ -210,6 +274,11 @@ async function fetchSnapshot(env) {
   const devices = telemetry.deviceDataList || telemetry.devices || [];
   const inverter = devices.find(device => device.deviceSn === deviceSn) || devices[0];
   const points = Object.fromEntries((inverter?.dataList || []).map(point => [point.key, Number(point.value)]));
+  try {
+    await saveBmsHistorySample(env, points, Date.now());
+  } catch (error) {
+    console.warn("Could not save BMS history sample:", error.message);
+  }
 
   const gridVoltageV = Number.isFinite(points.GridVoltageL1L2) ? points.GridVoltageL1L2 : null;
   const gridFrequencyHz = Number.isFinite(points.GridFrequency) ? points.GridFrequency : null;
@@ -435,6 +504,12 @@ async function fetchBatteryDiagnostics(env) {
   ]));
 
   const alertList = Array.isArray(alertsResult.alertList) ? alertsResult.alertList : [];
+  let history = null;
+  try {
+    history = await fetchBmsHistory(env, "24h");
+  } catch (error) {
+    console.warn("Could not read BMS history:", error.message);
+  }
 
   return {
     ok: true,
@@ -455,6 +530,7 @@ async function fetchBatteryDiagnostics(env) {
       status: alert.status ?? null
     })),
     alertCount: Number(alertsResult.total ?? alertList.length),
+    history,
     periodDays: 30,
     note: "Only values actually returned by DeyeCloud are included. Cell-level BMS values may not be exposed by this inverter API."
   };

@@ -605,16 +605,6 @@ export default {
         note: "Only presence is reported; secret values are never returned."
       });
     }
-    if (url.pathname === "/api/cleanup-bms-history") {
-      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
-      try {
-        await env.DEYE_DB.prepare("DROP TABLE IF EXISTS bms_samples").run();
-        return json({ ok: true, message: "BMS history table removed." });
-      } catch (error) {
-        console.error("BMS history cleanup error:", error);
-        return json({ ok: false, error: error.message || "Could not remove BMS history table" }, 500);
-      }
-    }
     if (url.pathname === "/api/battery-diagnostics") {
       if (request.method === "OPTIONS") return json({ ok: true });
       if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);

@@ -606,7 +606,7 @@ export default {
       });
     }
     if (url.pathname === "/api/cleanup-bms-history") {
-      if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
       try {
         await env.DEYE_DB.prepare("DROP TABLE IF EXISTS bms_samples").run();
         return json({ ok: true, message: "BMS history table removed." });

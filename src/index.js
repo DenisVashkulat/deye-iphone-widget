@@ -407,6 +407,59 @@ async function fetchDeviceAlerts(env) {
   };
 }
 
+
+async function fetchBatteryDiagnostics(env) {
+  const token = await getToken(env);
+  const deviceSn = env.DEYE_DEVICE_SN || "2608156594";
+  const now = Math.floor(Date.now() / 1000);
+  const startTimestamp = now - 30 * 24 * 60 * 60;
+
+  const [latestResult, measurePointsResult, alertsResult] = await Promise.all([
+    deyeRequest(env, "device/latest", token, { deviceList: [deviceSn] }),
+    deyeRequest(env, "device/measurePoints", token, { deviceSn, deviceType: "INVERTER" }),
+    deyeRequest(env, "device/alertList", token, {
+      deviceSn,
+      startTimestamp,
+      endTimestamp: now,
+      page: 1,
+      size: 100
+    })
+  ]);
+
+  const devices = latestResult.deviceDataList || latestResult.devices || [];
+  const device = devices.find(item => item.deviceSn === deviceSn) || devices[0] || null;
+  const dataList = Array.isArray(device?.dataList) ? device.dataList : [];
+  const latestValues = Object.fromEntries(dataList.map(item => [
+    item.key,
+    { value: item.value, unit: item.unit ?? null }
+  ]));
+
+  const alertList = Array.isArray(alertsResult.alertList) ? alertsResult.alertList : [];
+
+  return {
+    ok: true,
+    deviceSn,
+    collectedAt: device?.collectionTime ? Number(device.collectionTime) * 1000 : Date.now(),
+    deviceState: device?.deviceState ?? null,
+    deviceType: device?.deviceType ?? null,
+    availableMeasurePoints: measurePointsResult.measurePoints || [],
+    latestDataPoints: dataList,
+    latestValues,
+    alerts: alertList.map(alert => ({
+      alertCode: alert.alertCode ?? null,
+      alertName: alert.alertName ?? null,
+      protocolName: alert.protocolName ?? null,
+      description: alert.description ?? null,
+      alertStartTime: alert.alertStartTime ?? null,
+      alertEndTime: alert.alertEndTime ?? null,
+      status: alert.status ?? null
+    })),
+    alertCount: Number(alertsResult.total ?? alertList.length),
+    periodDays: 30,
+    note: "Only values actually returned by DeyeCloud are included. Cell-level BMS values may not be exposed by this inverter API."
+  };
+}
+
 async function fetchDtekSchedule() {
   const response = await fetch(
     "https://app.yasno.ua/api/blackout-service/public/shutdowns/regions/25/dsos/902/planned-outages",
@@ -553,6 +606,16 @@ export default {
         },
         note: "Only presence is reported; secret values are never returned."
       });
+    }
+    if (url.pathname === "/api/battery-diagnostics") {
+      if (request.method === "OPTIONS") return json({ ok: true });
+      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+      try {
+        return json(await fetchBatteryDiagnostics(env));
+      } catch (error) {
+        console.error("Deye battery diagnostics error:", error);
+        return json({ ok: false, error: error.message || "Could not load battery diagnostics" }, 502);
+      }
     }
     if (url.pathname === "/api/device-history") {
       if (request.method === "OPTIONS") return json({ ok: true });

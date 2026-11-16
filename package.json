@@ -9,5 +9,8 @@
   },
   "devDependencies": {
     "wrangler": "^4.158.0"
+  },
+  "dependencies": {
+    "@block65/webcrypto-web-push": "^2.0.0"
   }
 }

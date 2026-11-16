@@ -51,6 +51,16 @@ async function savePushSubscription(env, subscription) {
     "INSERT INTO push_subscriptions (endpoint, p256dh, auth, created_at) VALUES (?1, ?2, ?3, ?4) " +
     "ON CONFLICT(endpoint) DO UPDATE SET p256dh=excluded.p256dh, auth=excluded.auth"
   ).bind(subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth, Date.now()).run();
+
+  // Anchor alert history to the latest known grid state when the first device subscribes.
+  const state = await env.DEYE_DB.prepare("SELECT id FROM push_state WHERE id = 1").first();
+  if (!state) {
+    let snapshot = null;
+    try { snapshot = await readSavedSnapshot(env); } catch (_) {}
+    await env.DEYE_DB.prepare(
+      "INSERT OR IGNORE INTO push_state (id, last_grid_off_at, last_grid_on_at) VALUES (1, ?1, ?2)"
+    ).bind(snapshot?.lastGridOffAt || null, snapshot?.lastGridOnAt || null).run();
+  }
 }
 
 async function sendPushToAll(env, message) {

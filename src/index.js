@@ -185,8 +185,8 @@ async function notifyGridTransitions(env, snapshot) {
   if (Number(claim.meta?.changes || 0) !== 1) return;
 
   const message = current === 0
-    ? { title: "Deye Monitor", body: "Электросеть пропала. Дом перешёл на питание от батареи.", tag: "grid-off", url: "/" }
-    : { title: "Deye Monitor", body: "Электроснабжение восстановлено.", tag: "grid-on", url: "/" };
+    ? { title: "Deye Monitor", body: "Електропостачання зникло. Будинок перейшов на живлення від акумулятора.", tag: "grid-off", url: "/" }
+    : { title: "Deye Monitor", body: "Електропостачання відновлено.", tag: "grid-on", url: "/" };
 
   try {
     await sendPushToAll(env, message);

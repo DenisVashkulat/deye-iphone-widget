@@ -404,6 +404,20 @@ function base64UrlToBytes(value){
 }
 async function initPushNotifications(){
   const button=el("push-enable");
+  let currentSubscription=null;
+  let notificationsEnabled=false;
+  const renderButton=()=>{
+    button.textContent=notificationsEnabled?"🔔 Вимкнути сповіщення":"🔕 Увімкнути сповіщення";
+  };
+  const updateServerSetting=async(enabled,subscription)=>{
+    const response=await fetch("/api/push/settings",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({endpoint:subscription.endpoint,enabled})
+    });
+    const data=await response.json();
+    if(!response.ok||!data.ok)throw new Error(data.error||"Не вдалося змінити налаштування сповіщень.");
+  };
   if(!("serviceWorker" in navigator)||!("PushManager" in window)||!("Notification" in window)){
     button.disabled=true;
     button.textContent="Сповіщення недоступні";
@@ -411,18 +425,32 @@ async function initPushNotifications(){
   }
   try{
     const registration=await navigator.serviceWorker.register("/sw.js");
-    const existing=await registration.pushManager.getSubscription();
-    if(existing&&Notification.permission==="granted"){
-      await fetch("/api/push/subscribe",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(existing.toJSON())});
-      button.textContent="✓ Сповіщення увімкнені";
+    currentSubscription=await registration.pushManager.getSubscription();
+    if(currentSubscription&&Notification.permission==="granted"){
+      await fetch("/api/push/subscribe",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(currentSubscription.toJSON())
+      });
+      const status=await fetch("/api/push/settings?endpoint="+encodeURIComponent(currentSubscription.endpoint),{cache:"no-store"});
+      const statusData=await status.json();
+      notificationsEnabled=!!(status.ok&&statusData.ok&&statusData.enabled);
     }
+    renderButton();
   }catch(error){
     console.warn("Push initialization failed:",error);
+    button.textContent="🔕 Увімкнути сповіщення";
   }
   button.addEventListener("click",async()=>{
     button.disabled=true;
-    button.textContent="Налаштовуємо…";
     try{
+      if(notificationsEnabled&&currentSubscription){
+        await updateServerSetting(false,currentSubscription);
+        notificationsEnabled=false;
+        renderButton();
+        alert("Сповіщення вимкнено. Дані моніторингу продовжать оновлюватися.");
+        return;
+      }
       if(!(window.matchMedia("(display-mode: standalone)").matches||navigator.standalone)){
         throw new Error("Відкрий Deye Monitor саме з іконки на екрані «Домой» iPhone.");
       }
@@ -432,19 +460,19 @@ async function initPushNotifications(){
       const keyResponse=await fetch("/api/push/public-key",{cache:"no-store"});
       const keyData=await keyResponse.json();
       if(!keyResponse.ok||!keyData.ok)throw new Error(keyData.error||"Не вдалося отримати ключ сповіщень.");
-      let subscription=await registration.pushManager.getSubscription();
-      if(subscription){
-        const oldKey=subscription.options.applicationServerKey;
+      currentSubscription=await registration.pushManager.getSubscription();
+      if(currentSubscription){
+        const oldKey=currentSubscription.options.applicationServerKey;
         const newKey=base64UrlToBytes(keyData.publicKey);
         const sameKey=oldKey&&oldKey.byteLength===newKey.byteLength&&
           newKey.every((value,index)=>value===new Uint8Array(oldKey)[index]);
         if(!sameKey){
-          await subscription.unsubscribe();
-          subscription=null;
+          await currentSubscription.unsubscribe();
+          currentSubscription=null;
         }
       }
-      if(!subscription){
-        subscription=await registration.pushManager.subscribe({
+      if(!currentSubscription){
+        currentSubscription=await registration.pushManager.subscribe({
           userVisibleOnly:true,
           applicationServerKey:base64UrlToBytes(keyData.publicKey)
         });
@@ -452,18 +480,20 @@ async function initPushNotifications(){
       const saved=await fetch("/api/push/subscribe",{
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify(subscription.toJSON())
+        body:JSON.stringify(currentSubscription.toJSON())
       });
       const savedData=await saved.json();
       if(!saved.ok||!savedData.ok)throw new Error(savedData.error||"Не вдалося зберегти підписку.");
+      await updateServerSetting(true,currentSubscription);
       const test=await fetch("/api/push/test",{method:"POST"});
       const testData=await test.json();
       if(!test.ok||!testData.ok)throw new Error(testData.error||"Підписку збережено, але тестове сповіщення не надіслано.");
-      button.textContent="✓ Сповіщення увімкнені";
-      alert("Готово! Перевір тестове сповіщення від Deye Monitor.");
+      notificationsEnabled=true;
+      renderButton();
+      alert("Сповіщення увімкнено! Перевір тестове повідомлення від Deye Monitor.");
     }catch(error){
-      button.textContent="🔔 Увімкнути сповіщення";
-      alert(error.message||"Не вдалося увімкнути сповіщення.");
+      renderButton();
+      alert(error.message||"Не вдалося змінити налаштування сповіщень.");
     }finally{
       button.disabled=false;
     }

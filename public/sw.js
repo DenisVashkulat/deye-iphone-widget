@@ -2,11 +2,14 @@ self.addEventListener("push",event=>{
   let data={};
   try{data=event.data?event.data.json():{};}catch(_){data={body:event.data?event.data.text():""};}
   event.waitUntil(self.registration.showNotification(data.title||"Deye Monitor",{
-    body:data.body||"Изменился статус электросети.",
+    body:data.body||"Змінився стан електромережі.",
     icon:"/icon.svg",
     badge:"/icon.svg",
     tag:data.tag||"deye-grid",
+    timestamp:Date.now(),
+    dir:"auto",
     renotify:false,
+    silent:false,
     data:{url:data.url||"/"}
   }));
 });

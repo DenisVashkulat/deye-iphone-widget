@@ -4,6 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#0a1020">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="/manifest.webmanifest">
   <title>Deye Monitor</title>
   <style>
     :root{color-scheme:dark;--bg:#080e1b;--panel:#121d31;--panel2:#17243b;--line:#283956;--muted:#9aabc4;--text:#f3f7ff;--blue:#55a5ff;--green:#32df8c;--red:#ff686e;--yellow:#f5c85b}
@@ -40,7 +43,7 @@
     @media(max-width:850px){.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}.cols2{grid-template-columns:1fr}.chart-grid{grid-template-columns:1fr}.top{align-items:flex-start}.flow{max-width:650px;margin:auto}}
     @media(max-width:520px){body{padding:15px 11px 28px}.top{display:block}.top-right{justify-content:flex-start;margin-top:12px}.logo{width:45px;height:45px}.metric{padding:14px;min-height:119px}.metric-icon{width:34px;height:34px}.grid4{gap:9px}.metric-value{font-size:27px}.panel{padding:15px;border-radius:16px}.panel-title{font-size:16px}.grid-state{gap:13px;min-height:112px}.state-mark{width:65px;height:65px;font-size:34px;border-width:6px}.state-name{font-size:23px}.flow{grid-template-columns:1fr 28px 1fr 28px 1fr;gap:0}.flow-symbol{font-size:27px}.flow-center{width:50px;height:50px;font-size:12px}.flow-node strong{font-size:16px}.flow-node small{font-size:11px}.arrow{font-size:19px}.flow-extra{gap:12px}.range button{padding:7px 12px}.stats3{gap:5px}.stat strong{font-size:22px}}
 
-    .dtek-meta{display:flex;flex-wrap:wrap;gap:8px 14px;color:var(--muted);font-size:12px;margin-top:-4px;margin-bottom:16px}
+    .push-button{border:1px solid #3977b8;background:#173b61;color:#eef7ff;border-radius:999px;padding:9px 13px;font:600 13px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;cursor:pointer}.push-button:disabled{opacity:.65;cursor:default}.dtek-meta{display:flex;flex-wrap:wrap;gap:8px 14px;color:var(--muted);font-size:12px;margin-top:-4px;margin-bottom:16px}
     .dtek-days{display:grid;grid-template-columns:1fr 1fr;gap:14px}
     .dtek-day{background:#111d30;border:1px solid #293a55;border-radius:13px;padding:13px}
     .dtek-day-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:10px}
@@ -62,7 +65,7 @@
 <body><main>
   <header class="top">
     <div class="brand"><div class="logo">ϟ</div><div><h1>Deye Monitor</h1><div class="subtitle">Ваш домашній енергетичний помічник</div></div></div>
-    <div class="top-right"><span class="live" id="live">● Підключення</span><span class="pill updated" id="updated">Оновлюємо дані…</span></div>
+    <div class="top-right"><span class="live" id="live">● Підключення</span><span class="pill updated" id="updated">Оновлюємо дані…</span><button class="push-button" id="push-enable" type="button">🔔 Увімкнути сповіщення</button></div>
   </header>
 
   <section class="grid4">
@@ -392,6 +395,72 @@ document.querySelectorAll("[data-range]").forEach(button=>{
     refreshHistory(currentRange);
   });
 });
+
+function base64UrlToBytes(value){
+  const padding="=".repeat((4-value.length%4)%4);
+  const base64=(value+padding).replace(/-/g,"+").replace(/_/g,"/");
+  const raw=atob(base64);
+  return Uint8Array.from(raw,char=>char.charCodeAt(0));
+}
+async function initPushNotifications(){
+  const button=el("push-enable");
+  if(!("serviceWorker" in navigator)||!("PushManager" in window)||!("Notification" in window)){
+    button.disabled=true;
+    button.textContent="Сповіщення недоступні";
+    return;
+  }
+  try{
+    const registration=await navigator.serviceWorker.register("/sw.js");
+    const existing=await registration.pushManager.getSubscription();
+    if(existing&&Notification.permission==="granted"){
+      await fetch("/api/push/subscribe",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(existing.toJSON())});
+      button.textContent="✓ Сповіщення увімкнені";
+    }
+  }catch(error){
+    console.warn("Push initialization failed:",error);
+  }
+  button.addEventListener("click",async()=>{
+    button.disabled=true;
+    button.textContent="Налаштовуємо…";
+    try{
+      if(!(window.matchMedia("(display-mode: standalone)").matches||navigator.standalone)){
+        throw new Error("Відкрий Deye Monitor саме з іконки на екрані «Домой» iPhone.");
+      }
+      const permission=await Notification.requestPermission();
+      if(permission!=="granted")throw new Error("Дозвіл на сповіщення не надано. Перевір Налаштування iPhone.");
+      const registration=await navigator.serviceWorker.ready;
+      const keyResponse=await fetch("/api/push/public-key",{cache:"no-store"});
+      const keyData=await keyResponse.json();
+      if(!keyResponse.ok||!keyData.ok)throw new Error(keyData.error||"Не вдалося отримати ключ сповіщень.");
+      let subscription=await registration.pushManager.getSubscription();
+      if(!subscription){
+        subscription=await registration.pushManager.subscribe({
+          userVisibleOnly:true,
+          applicationServerKey:base64UrlToBytes(keyData.publicKey)
+        });
+      }
+      const saved=await fetch("/api/push/subscribe",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(subscription.toJSON())
+      });
+      const savedData=await saved.json();
+      if(!saved.ok||!savedData.ok)throw new Error(savedData.error||"Не вдалося зберегти підписку.");
+      const test=await fetch("/api/push/test",{method:"POST"});
+      const testData=await test.json();
+      if(!test.ok||!testData.ok)throw new Error(testData.error||"Підписку збережено, але тестове сповіщення не надіслано.");
+      button.textContent="✓ Сповіщення увімкнені";
+      alert("Готово! Перевір тестове сповіщення від Deye Monitor.");
+    }catch(error){
+      button.textContent="🔔 Увімкнути сповіщення";
+      alert(error.message||"Не вдалося увімкнути сповіщення.");
+    }finally{
+      button.disabled=false;
+    }
+  });
+}
+
+initPushNotifications();
 refreshStatus();
 refreshHistory(currentRange);
 refreshDtekSchedule();

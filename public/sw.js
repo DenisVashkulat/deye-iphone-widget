@@ -6,7 +6,7 @@ self.addEventListener("push",event=>{
     icon:"/icon.svg",
     badge:"/icon.svg",
     tag:data.tag||"deye-grid",
-    renotify:true,
+    renotify:false,
     data:{url:data.url||"/"}
   }));
 });

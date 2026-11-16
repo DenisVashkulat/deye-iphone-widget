@@ -86,7 +86,9 @@ async function sendPushToAll(env, message) {
         await env.DEYE_DB.prepare("DELETE FROM push_subscriptions WHERE endpoint = ?1").bind(row.endpoint).run();
       } else if (!response.ok) {
         failed++;
-        console.warn("Web Push delivery failed:", response.status);
+        let detail = "";
+        try { detail = (await response.text()).slice(0, 500); } catch (_) {}
+        console.warn("Web Push delivery failed:", response.status, detail);
       }
     } catch (error) {
       failed++;

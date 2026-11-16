@@ -860,13 +860,18 @@ export default {
   },
 
   async scheduled(controller, env, ctx) {
-    ctx.waitUntil(fetchSnapshot(env).then(snapshot => {
-      console.log("Deye snapshot refreshed", {
-        batteryPercent: snapshot.batteryPercent,
-        cacheFetchedAt: snapshot.cacheFetchedAt
-      });
-    }).catch(error => {
-      console.error("Scheduled Deye refresh failed:", error);
-    }));
+    ctx.waitUntil((async () => {
+      try {
+        const snapshot = await fetchSnapshot(env);
+        console.log("Deye snapshot refreshed", {
+          batteryPercent: snapshot.batteryPercent,
+          gridPresent: snapshot.gridPresent,
+          cacheFetchedAt: snapshot.cacheFetchedAt
+        });
+        await notifyGridTransitions(env, snapshot);
+      } catch (error) {
+        console.error("Scheduled Deye refresh or push notification failed:", error);
+      }
+    })());
   }
 };

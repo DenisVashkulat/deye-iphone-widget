@@ -111,7 +111,7 @@ async function notifyGridTransitions(env, snapshot) {
   if (current === null) return;
 
   let state = await env.DEYE_DB.prepare(
-    "SELECT stable_grid_present, candidate_grid_present, candidate_count, sending " +
+    "SELECT stable_grid_present, candidate_grid_present, candidate_count, sending, updated_at " +
     "FROM push_grid_state WHERE id = 1"
   ).first();
 
@@ -135,7 +135,13 @@ async function notifyGridTransitions(env, snapshot) {
     return;
   }
 
-  if (Number(state.sending || 0) === 1) return;
+  if (Number(state.sending || 0) === 1) {
+    // Recover a claim left behind if a Worker execution was terminated unexpectedly.
+    if (Date.now() - Number(state.updated_at || 0) < 3 * 60 * 1000) return;
+    await env.DEYE_DB.prepare(
+      "UPDATE push_grid_state SET sending = 0 WHERE id = 1 AND sending = 1"
+    ).run();
+  }
 
   // Require two consecutive one-minute checks with the same new state.
   await env.DEYE_DB.prepare(
@@ -157,10 +163,10 @@ async function notifyGridTransitions(env, snapshot) {
 
   // Atomically claim this transition so overlapping Cron executions cannot send duplicates.
   const claim = await env.DEYE_DB.prepare(
-    "UPDATE push_grid_state SET sending = 1 WHERE id = 1 AND stable_grid_present = ?1 " +
-    "AND candidate_grid_present = ?2 AND candidate_count >= 2 AND sending = 0 RETURNING id"
-  ).bind(stable, current).all();
-  if (!claim.results || claim.results.length === 0) return;
+    "UPDATE push_grid_state SET sending = 1, updated_at = ?3 WHERE id = 1 AND stable_grid_present = ?1 " +
+    "AND candidate_grid_present = ?2 AND candidate_count >= 2 AND sending = 0"
+  ).bind(stable, current, Date.now()).run();
+  if (Number(claim.meta?.changes || 0) !== 1) return;
 
   const message = current === 0
     ? { title: "Deye Monitor", body: "Электросеть пропала. Дом перешёл на питание от батареи.", tag: "grid-off", url: "/" }

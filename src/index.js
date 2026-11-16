@@ -184,9 +184,26 @@ async function notifyGridTransitions(env, snapshot) {
   ).bind(stable, current, Date.now()).run();
   if (Number(claim.meta?.changes || 0) !== 1) return;
 
+  const batteryText = Number.isFinite(Number(snapshot.batteryPercent))
+    ? `🔋 Заряд акумулятора: ${Math.round(Number(snapshot.batteryPercent))}%`
+    : "";
+  const voltageText = Number.isFinite(Number(snapshot.gridVoltageV)) && Number(snapshot.gridVoltageV) > 0
+    ? `⚡ Напруга мережі: ${Math.round(Number(snapshot.gridVoltageV))} В`
+    : "";
+  const details = [batteryText, voltageText].filter(Boolean).join(" · ");
   const message = current === 0
-    ? { title: "Deye Monitor", body: "Електропостачання зникло. Будинок перейшов на живлення від акумулятора.", tag: "grid-off", url: "/" }
-    : { title: "Deye Monitor", body: "Електропостачання відновлено.", tag: "grid-on", url: "/" };
+    ? {
+        title: "⚡ Мережу відключено",
+        body: ["Будинок перейшов на резервне живлення.", batteryText].filter(Boolean).join("\\n"),
+        tag: "grid-off",
+        url: "/"
+      }
+    : {
+        title: "✅ Електропостачання відновлено",
+        body: ["Мережа знову доступна. Будинок підключений до електромережі.", details].filter(Boolean).join("\\n"),
+        tag: "grid-on",
+        url: "/"
+      };
 
   try {
     await sendPushToAll(env, message);

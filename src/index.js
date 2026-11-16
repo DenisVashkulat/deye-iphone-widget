@@ -1,3 +1,5 @@
+import { buildPushPayload } from "@block65/webcrypto-web-push";
+
 const BASE_URL_DEFAULT = "https://eu1-developer.deyecloud.com";
 const CACHE_KEY = "latest";
 const CACHE_MAX_AGE_MS = 4 * 60 * 1000;
@@ -8,10 +10,119 @@ const json = (data, status = 200) => new Response(JSON.stringify(data), {
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type"
   }
 });
+
+
+
+function pushVapid(env) {
+  if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY || !env.VAPID_SUBJECT) {
+    throw new Error("Web Push is not configured. Add VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY and VAPID_SUBJECT secrets.");
+  }
+  return {
+    subject: env.VAPID_SUBJECT,
+    publicKey: env.VAPID_PUBLIC_KEY,
+    privateKey: env.VAPID_PRIVATE_KEY
+  };
+}
+
+async function ensurePushTables(env) {
+  await env.DEYE_DB.prepare(
+    "CREATE TABLE IF NOT EXISTS push_subscriptions (" +
+    "endpoint TEXT PRIMARY KEY, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at INTEGER NOT NULL)"
+  ).run();
+  await env.DEYE_DB.prepare(
+    "CREATE TABLE IF NOT EXISTS push_state (" +
+    "id INTEGER PRIMARY KEY CHECK (id = 1), last_grid_off_at INTEGER, last_grid_on_at INTEGER)"
+  ).run();
+}
+
+async function savePushSubscription(env, subscription) {
+  await ensurePushTables(env);
+  if (!subscription || typeof subscription.endpoint !== "string" ||
+      !subscription.endpoint.startsWith("https://") ||
+      typeof subscription.keys?.p256dh !== "string" ||
+      typeof subscription.keys?.auth !== "string") {
+    throw new Error("Invalid push subscription.");
+  }
+  await env.DEYE_DB.prepare(
+    "INSERT INTO push_subscriptions (endpoint, p256dh, auth, created_at) VALUES (?1, ?2, ?3, ?4) " +
+    "ON CONFLICT(endpoint) DO UPDATE SET p256dh=excluded.p256dh, auth=excluded.auth"
+  ).bind(subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth, Date.now()).run();
+}
+
+async function sendPushToAll(env, message) {
+  await ensurePushTables(env);
+  const rows = await env.DEYE_DB.prepare(
+    "SELECT endpoint, p256dh, auth FROM push_subscriptions"
+  ).all();
+  const vapid = pushVapid(env);
+  let failed = 0;
+  for (const row of rows.results || []) {
+    const subscription = {
+      endpoint: row.endpoint,
+      expirationTime: null,
+      keys: { p256dh: row.p256dh, auth: row.auth }
+    };
+    try {
+      const payload = await buildPushPayload({
+        data: message,
+        options: { ttl: 3600, urgency: "high", topic: "grid-status" }
+      }, subscription, vapid);
+      const response = await fetch(subscription.endpoint, payload);
+      if (response.status === 404 || response.status === 410) {
+        await env.DEYE_DB.prepare("DELETE FROM push_subscriptions WHERE endpoint = ?1").bind(row.endpoint).run();
+      } else if (!response.ok) {
+        failed++;
+        console.warn("Web Push delivery failed:", response.status);
+      }
+    } catch (error) {
+      failed++;
+      console.warn("Web Push send error:", error.message);
+    }
+  }
+  if (failed) throw new Error("Some Web Push deliveries failed; they will be retried on the next check.");
+  return (rows.results || []).length;
+}
+
+async function notifyGridTransitions(env, snapshot) {
+  await ensurePushTables(env);
+  let state = await env.DEYE_DB.prepare(
+    "SELECT last_grid_off_at, last_grid_on_at FROM push_state WHERE id = 1"
+  ).first();
+
+  // First run only records the current baseline; it never sends an old outage as a new alert.
+  if (!state) {
+    await env.DEYE_DB.prepare(
+      "INSERT INTO push_state (id, last_grid_off_at, last_grid_on_at) VALUES (1, ?1, ?2)"
+    ).bind(snapshot.lastGridOffAt || null, snapshot.lastGridOnAt || null).run();
+    return;
+  }
+
+  const events = [];
+  const offAt = Number(snapshot.lastGridOffAt || 0);
+  const onAt = Number(snapshot.lastGridOnAt || 0);
+  if (offAt > Number(state.last_grid_off_at || 0)) {
+    events.push({ type: "off", at: offAt });
+  }
+  if (onAt > Number(state.last_grid_on_at || 0)) {
+    events.push({ type: "on", at: onAt });
+  }
+  events.sort((a, b) => a.at - b.at);
+
+  for (const event of events) {
+    const message = event.type === "off"
+      ? { title: "Deye Monitor", body: "Электросеть пропала. Дом перешёл на питание от батареи.", tag: "grid-off", url: "/" }
+      : { title: "Deye Monitor", body: "Электроснабжение восстановлено.", tag: "grid-on", url: "/" };
+    await sendPushToAll(env, message);
+    const column = event.type === "off" ? "last_grid_off_at" : "last_grid_on_at";
+    await env.DEYE_DB.prepare(
+      "UPDATE push_state SET " + column + " = ?1 WHERE id = 1"
+    ).bind(event.at).run();
+  }
+}
 
 async function deyeRequest(env, path, token, body) {
   const response = await fetch(`${env.DEYE_BASE_URL || BASE_URL_DEFAULT}/v1.0/${path}`, {
@@ -675,6 +786,54 @@ export default {
         return json({ ok: false, error: error.message || "Could not load DTEK address status" }, 502);
       }
     }
+
+    if (url.pathname === "/api/push/public-key") {
+      if (request.method === "OPTIONS") return json({ ok: true });
+      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+      try {
+        pushVapid(env);
+        return json({ ok: true, publicKey: env.VAPID_PUBLIC_KEY });
+      } catch (error) {
+        return json({ ok: false, error: error.message }, 503);
+      }
+    }
+    if (url.pathname === "/api/push/subscribe") {
+      if (request.method === "OPTIONS") return json({ ok: true });
+      if (request.method !== "POST" && request.method !== "DELETE") return json({ error: "Method not allowed" }, 405);
+      const origin = request.headers.get("Origin");
+      if (origin && origin !== url.origin) return json({ error: "Forbidden origin" }, 403);
+      try {
+        await ensurePushTables(env);
+        const body = await request.json();
+        if (request.method === "DELETE") {
+          if (typeof body.endpoint !== "string") return json({ error: "Endpoint is required" }, 400);
+          await env.DEYE_DB.prepare("DELETE FROM push_subscriptions WHERE endpoint = ?1").bind(body.endpoint).run();
+          return json({ ok: true, subscribed: false });
+        }
+        await savePushSubscription(env, body);
+        return json({ ok: true, subscribed: true });
+      } catch (error) {
+        return json({ ok: false, error: error.message || "Could not save push subscription" }, 400);
+      }
+    }
+    if (url.pathname === "/api/push/test") {
+      if (request.method === "OPTIONS") return json({ ok: true });
+      if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+      const origin = request.headers.get("Origin");
+      if (origin && origin !== url.origin) return json({ error: "Forbidden origin" }, 403);
+      try {
+        const count = await sendPushToAll(env, {
+          title: "Deye Monitor",
+          body: "Тестове сповіщення працює. Тепер повідомлятиму про стан електромережі.",
+          tag: "push-test",
+          url: "/"
+        });
+        return json({ ok: true, sent: count });
+      } catch (error) {
+        return json({ ok: false, error: error.message || "Could not send test notification" }, 502);
+      }
+    }
+
     if (url.pathname === "/api/status") {
       if (request.method === "OPTIONS") return json({ ok: true });
       if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);

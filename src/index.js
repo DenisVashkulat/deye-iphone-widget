@@ -37,6 +37,12 @@ async function ensurePushTables(env) {
     "CREATE TABLE IF NOT EXISTS push_state (" +
     "id INTEGER PRIMARY KEY CHECK (id = 1), last_grid_off_at INTEGER, last_grid_on_at INTEGER)"
   ).run();
+  await env.DEYE_DB.prepare(
+    "CREATE TABLE IF NOT EXISTS push_grid_state (" +
+    "id INTEGER PRIMARY KEY CHECK (id = 1), stable_grid_present INTEGER, " +
+    "candidate_grid_present INTEGER, candidate_count INTEGER NOT NULL DEFAULT 0, " +
+    "sending INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL)"
+  ).run();
 }
 
 async function savePushSubscription(env, subscription) {
@@ -101,38 +107,76 @@ async function sendPushToAll(env, message) {
 
 async function notifyGridTransitions(env, snapshot) {
   await ensurePushTables(env);
+  const current = snapshot.gridPresent === true ? 1 : snapshot.gridPresent === false ? 0 : null;
+  if (current === null) return;
+
   let state = await env.DEYE_DB.prepare(
-    "SELECT last_grid_off_at, last_grid_on_at FROM push_state WHERE id = 1"
+    "SELECT stable_grid_present, candidate_grid_present, candidate_count, sending " +
+    "FROM push_grid_state WHERE id = 1"
   ).first();
 
-  // First run only records the current baseline; it never sends an old outage as a new alert.
+  // Establish a baseline on first run. Do not notify about an outage that began before setup.
   if (!state) {
     await env.DEYE_DB.prepare(
-      "INSERT INTO push_state (id, last_grid_off_at, last_grid_on_at) VALUES (1, ?1, ?2)"
-    ).bind(snapshot.lastGridOffAt || null, snapshot.lastGridOnAt || null).run();
+      "INSERT OR IGNORE INTO push_grid_state " +
+      "(id, stable_grid_present, candidate_grid_present, candidate_count, sending, updated_at) " +
+      "VALUES (1, ?1, NULL, 0, 0, ?2)"
+    ).bind(current, Date.now()).run();
     return;
   }
 
-  const events = [];
-  const offAt = Number(snapshot.lastGridOffAt || 0);
-  const onAt = Number(snapshot.lastGridOnAt || 0);
-  if (offAt > Number(state.last_grid_off_at || 0)) {
-    events.push({ type: "off", at: offAt });
-  }
-  if (onAt > Number(state.last_grid_on_at || 0)) {
-    events.push({ type: "on", at: onAt });
-  }
-  events.sort((a, b) => a.at - b.at);
-
-  for (const event of events) {
-    const message = event.type === "off"
-      ? { title: "Deye Monitor", body: "Электросеть пропала. Дом перешёл на питание от батареи.", tag: "grid-off", url: "/" }
-      : { title: "Deye Monitor", body: "Электроснабжение восстановлено.", tag: "grid-on", url: "/" };
-    await sendPushToAll(env, message);
-    const column = event.type === "off" ? "last_grid_off_at" : "last_grid_on_at";
+  const stable = Number(state.stable_grid_present);
+  if (current === stable) {
+    // The previous state is back: discard any short-lived voltage/frequency fluctuation.
     await env.DEYE_DB.prepare(
-      "UPDATE push_state SET " + column + " = ?1 WHERE id = 1"
-    ).bind(event.at).run();
+      "UPDATE push_grid_state SET candidate_grid_present = NULL, candidate_count = 0 " +
+      "WHERE id = 1 AND sending = 0"
+    ).run();
+    return;
+  }
+
+  if (Number(state.sending || 0) === 1) return;
+
+  // Require two consecutive one-minute checks with the same new state.
+  await env.DEYE_DB.prepare(
+    "UPDATE push_grid_state SET " +
+    "candidate_count = CASE WHEN candidate_grid_present = ?1 THEN candidate_count + 1 ELSE 1 END, " +
+    "candidate_grid_present = ?1, updated_at = ?2 " +
+    "WHERE id = 1 AND stable_grid_present = ?3 AND sending = 0"
+  ).bind(current, Date.now(), stable).run();
+
+  state = await env.DEYE_DB.prepare(
+    "SELECT stable_grid_present, candidate_grid_present, candidate_count, sending " +
+    "FROM push_grid_state WHERE id = 1"
+  ).first();
+
+  if (!state || Number(state.sending || 0) === 1 ||
+      Number(state.stable_grid_present) === current ||
+      Number(state.candidate_grid_present) !== current ||
+      Number(state.candidate_count || 0) < 2) return;
+
+  // Atomically claim this transition so overlapping Cron executions cannot send duplicates.
+  const claim = await env.DEYE_DB.prepare(
+    "UPDATE push_grid_state SET sending = 1 WHERE id = 1 AND stable_grid_present = ?1 " +
+    "AND candidate_grid_present = ?2 AND candidate_count >= 2 AND sending = 0 RETURNING id"
+  ).bind(stable, current).all();
+  if (!claim.results || claim.results.length === 0) return;
+
+  const message = current === 0
+    ? { title: "Deye Monitor", body: "Электросеть пропала. Дом перешёл на питание от батареи.", tag: "grid-off", url: "/" }
+    : { title: "Deye Monitor", body: "Электроснабжение восстановлено.", tag: "grid-on", url: "/" };
+
+  try {
+    await sendPushToAll(env, message);
+    await env.DEYE_DB.prepare(
+      "UPDATE push_grid_state SET stable_grid_present = ?1, candidate_grid_present = NULL, " +
+      "candidate_count = 0, sending = 0, updated_at = ?2 WHERE id = 1"
+    ).bind(current, Date.now()).run();
+  } catch (error) {
+    await env.DEYE_DB.prepare(
+      "UPDATE push_grid_state SET sending = 0 WHERE id = 1"
+    ).run();
+    throw error;
   }
 }
 

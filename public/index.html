@@ -433,6 +433,16 @@ async function initPushNotifications(){
       const keyData=await keyResponse.json();
       if(!keyResponse.ok||!keyData.ok)throw new Error(keyData.error||"Не вдалося отримати ключ сповіщень.");
       let subscription=await registration.pushManager.getSubscription();
+      if(subscription){
+        const oldKey=subscription.options.applicationServerKey;
+        const newKey=base64UrlToBytes(keyData.publicKey);
+        const sameKey=oldKey&&oldKey.byteLength===newKey.byteLength&&
+          newKey.every((value,index)=>value===new Uint8Array(oldKey)[index]);
+        if(!sameKey){
+          await subscription.unsubscribe();
+          subscription=null;
+        }
+      }
       if(!subscription){
         subscription=await registration.pushManager.subscribe({
           userVisibleOnly:true,

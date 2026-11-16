@@ -91,10 +91,19 @@ async function sendPushToAll(env, message) {
       if (response.status === 404 || response.status === 410) {
         await env.DEYE_DB.prepare("DELETE FROM push_subscriptions WHERE endpoint = ?1").bind(row.endpoint).run();
       } else if (!response.ok) {
-        failed++;
         let detail = "";
         try { detail = (await response.text()).slice(0, 500); } catch (_) {}
-        console.warn("Web Push delivery failed:", response.status, detail);
+        if (response.status === 400 && detail.includes("VapidPkHashMismatch")) {
+          // This endpoint was created with a different VAPID public key; remove it
+          // so one stale device cannot block notifications to current subscriptions.
+          await env.DEYE_DB.prepare(
+            "DELETE FROM push_subscriptions WHERE endpoint = ?1"
+          ).bind(row.endpoint).run();
+          console.warn("Removed stale Web Push subscription with VAPID key mismatch.");
+        } else {
+          failed++;
+          console.warn("Web Push delivery failed:", response.status, detail);
+        }
       }
     } catch (error) {
       failed++;

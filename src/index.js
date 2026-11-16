@@ -33,6 +33,13 @@ async function ensurePushTables(env) {
     "CREATE TABLE IF NOT EXISTS push_subscriptions (" +
     "endpoint TEXT PRIMARY KEY, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at INTEGER NOT NULL)"
   ).run();
+  try {
+    await env.DEYE_DB.prepare(
+      "ALTER TABLE push_subscriptions ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1"
+    ).run();
+  } catch (_) {
+    // Column already exists.
+  }
   await env.DEYE_DB.prepare(
     "CREATE TABLE IF NOT EXISTS push_state (" +
     "id INTEGER PRIMARY KEY CHECK (id = 1), last_grid_off_at INTEGER, last_grid_on_at INTEGER)"
@@ -72,7 +79,7 @@ async function savePushSubscription(env, subscription) {
 async function sendPushToAll(env, message) {
   await ensurePushTables(env);
   const rows = await env.DEYE_DB.prepare(
-    "SELECT endpoint, p256dh, auth FROM push_subscriptions"
+    "SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE enabled = 1"
   ).all();
   const vapid = pushVapid(env);
   let failed = 0;
@@ -885,6 +892,38 @@ export default {
         return json({ ok: true, subscribed: true });
       } catch (error) {
         return json({ ok: false, error: error.message || "Could not save push subscription" }, 400);
+      }
+    }
+    if (url.pathname === "/api/push/settings") {
+      if (request.method === "OPTIONS") return json({ ok: true });
+      const origin = request.headers.get("Origin");
+      if (origin && origin !== url.origin) return json({ error: "Forbidden origin" }, 403);
+      try {
+        await ensurePushTables(env);
+        if (request.method === "GET") {
+          const endpoint = url.searchParams.get("endpoint");
+          if (!endpoint) return json({ error: "Endpoint is required" }, 400);
+          const row = await env.DEYE_DB.prepare(
+            "SELECT enabled FROM push_subscriptions WHERE endpoint = ?1"
+          ).bind(endpoint).first();
+          return json({ ok: true, enabled: row ? Number(row.enabled) === 1 : false });
+        }
+        if (request.method === "POST") {
+          const body = await request.json();
+          if (typeof body.endpoint !== "string" || typeof body.enabled !== "boolean") {
+            return json({ error: "Endpoint and enabled are required" }, 400);
+          }
+          const result = await env.DEYE_DB.prepare(
+            "UPDATE push_subscriptions SET enabled = ?1 WHERE endpoint = ?2"
+          ).bind(body.enabled ? 1 : 0, body.endpoint).run();
+          if (Number(result.meta?.changes || 0) !== 1) {
+            return json({ error: "Push subscription not found" }, 404);
+          }
+          return json({ ok: true, enabled: body.enabled });
+        }
+        return json({ error: "Method not allowed" }, 405);
+      } catch (error) {
+        return json({ ok: false, error: error.message || "Could not update push settings" }, 400);
       }
     }
     if (url.pathname === "/api/push/test") {

@@ -194,13 +194,13 @@ async function notifyGridTransitions(env, snapshot) {
   const message = current === 0
     ? {
         title: "⚡ Мережу відключено",
-        body: ["Будинок перейшов на резервне живлення.", batteryText].filter(Boolean).join("\\n"),
+        body: ["Будинок перейшов на резервне живлення.", batteryText].filter(Boolean).join("\n"),
         tag: "grid-off",
         url: "/"
       }
     : {
         title: "✅ Електропостачання відновлено",
-        body: ["Мережа знову доступна. Будинок підключений до електромережі.", details].filter(Boolean).join("\\n"),
+        body: ["Мережа знову доступна. Будинок підключений до електромережі.", details].filter(Boolean).join("\n"),
         tag: "grid-on",
         url: "/"
       };

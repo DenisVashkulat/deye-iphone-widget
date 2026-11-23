@@ -689,14 +689,14 @@ async function fetchYasnoAddressGroup() {
     streetChoices = streetChoices.concat(result);
     const match = result.find(item => {
       const value = String(item?.value || "").toLocaleLowerCase("uk-UA").replace(/[’']/g, "");
-      return value.includes("заболот") && /^\\d+$/.test(String(item?.id));
+      return value.includes("заболот") && /^\d+$/.test(String(item?.id));
     });
     if (!match) continue;
 
     const houses = await yasnoAddressGet("houses", { ...base, streetId: match.id, query: "58" });
     const house = houses.find(item => {
       const value = String(item?.value || "").trim();
-      return /^58(?:\\s|$|[-а-я])/i.test(value) && /^\\d+$/.test(String(item?.id));
+      return /^58(?:\\s|$|[-а-я])/i.test(value) && /^\d+$/.test(String(item?.id));
     });
     if (!house) {
       throw new Error("YASNO address directory: house 58 was not found for street " + String(match.value || match.id));

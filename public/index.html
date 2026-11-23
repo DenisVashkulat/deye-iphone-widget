@@ -295,9 +295,11 @@ function dtekRenderDay(label, day){
 function renderDtekSchedule(data){
   const days=el("dtek-days");
   days.innerHTML=dtekRenderDay("Сьогодні",data.today)+dtekRenderDay("Завтра",data.tomorrow);
-  el("dtek-updated").textContent=data.updatedOn
-    ?"Оновлено: "+new Date(data.updatedOn).toLocaleString("uk-UA",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})
-    :"Час оновлення невідомий";
+  el("dtek-updated").textContent=(data.updatedOn
+    ?"Дані YASNO: "+new Date(data.updatedOn).toLocaleString("uk-UA",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})
+    :"Час публікації YASNO невідомий")+(data.checkedAt
+    ?" · перевірено: "+new Date(data.checkedAt).toLocaleTimeString("uk-UA",{hour:"2-digit",minute:"2-digit"})
+    :"");
   const now=new Date();
   const kyivParts=new Intl.DateTimeFormat("en-GB",{timeZone:"Europe/Kyiv",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(now);
   const part=name=>Number(kyivParts.find(p=>p.type===name)?.value||0);
@@ -332,9 +334,9 @@ function renderDtekAddress(data){
     updated.textContent="Очікує налаштування";
     return;
   }
-  updated.textContent=data.stale
-    ?"Збережені дані · "+(data.lastSuccessfulAt?fmtDate(data.lastSuccessfulAt,true):"час невідомий")
-    :(data.updatedAt?"Оновлено ДТЕК: "+data.updatedAt:"Час оновлення невідомий");
+  updated.textContent=(data.updatedAt?"Дані ДТЕК: "+data.updatedAt:"Час публікації ДТЕК невідомий")+
+    (data.lastSuccessfulAt?" · перевірено: "+fmtDate(data.lastSuccessfulAt,true):"")+
+    (data.stale?" · ЗБЕРЕЖЕНІ ДАНІ":"");
   const staleNotice=data.stale
     ?"\n⚠ ДТЕК тимчасово недоступний. Показано останні збережені дані від "+(data.lastSuccessfulAt?fmtDate(data.lastSuccessfulAt,true):"невідомого часу")+". Перевірте актуальність на сайті ДТЕК."
     :"";
@@ -514,7 +516,9 @@ refreshStatus();
 refreshHistory(currentRange);
 refreshDtekSchedule();
 refreshDtekAddress();
-setInterval(refreshDtekSchedule,5*60*1000);
+// Refresh the public YASNO schedule more frequently; DTEK address checks
+// remain at five minutes to avoid repeatedly triggering its anti-bot protection.
+setInterval(refreshDtekSchedule,2*60*1000);
 setInterval(refreshDtekAddress,5*60*1000);
 setInterval(refreshStatus,15000);
 setInterval(updateRuntime,1000);

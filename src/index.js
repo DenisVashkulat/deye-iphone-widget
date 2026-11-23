@@ -696,7 +696,7 @@ async function fetchYasnoAddressGroup() {
     const houses = await yasnoAddressGet("houses", { ...base, streetId: match.id, query: "58" });
     const house = houses.find(item => {
       const value = String(item?.value || "").trim();
-      return /^58(?:\\s|$|[-а-я])/i.test(value) && /^\d+$/.test(String(item?.id));
+      return /^58(?:\s|$|[-а-я])/i.test(value) && /^\d+$/.test(String(item?.id));
     });
     if (!house) {
       throw new Error("YASNO address directory: house 58 was not found for street " + String(match.value || match.id));
@@ -856,7 +856,7 @@ async function fetchDtekAddressStatus(env) {
     payload = JSON.parse(rawText);
   } catch {
     const contentType = response.headers.get("content-type") || "unknown";
-    const preview = rawText.replace(/<[^>]*>/g, " ").replace(/\\s+/g, " ").trim().slice(0, 180);
+    const preview = rawText.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 180);
     throw new Error(
       "ДТЕК повернув не JSON. HTTP " + response.status +
       "; Content-Type: " + contentType +

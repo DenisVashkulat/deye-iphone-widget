@@ -690,6 +690,12 @@ async function ensureDtekAddressCache(env) {
     "CREATE TABLE IF NOT EXISTS dtek_address_cache (" +
     "id INTEGER PRIMARY KEY CHECK (id = 1), payload TEXT, fetched_at INTEGER, last_attempt_at INTEGER)"
   ).run();
+
+  // This cache is intentionally a singleton: retain only the latest DTEK response.
+  // The cleanup also removes extra rows if the table was created by an older schema.
+  await env.DEYE_DB.prepare(
+    "DELETE FROM dtek_address_cache WHERE id <> 1"
+  ).run();
 }
 
 async function readDtekAddressCache(env) {
@@ -835,8 +841,12 @@ async function fetchDtekAddressStatus(env) {
     lastSuccessfulAt: now
   };
 
+  // Replace the single cached payload in place; never append DTEK history.
   await env.DEYE_DB.prepare(
-    "UPDATE dtek_address_cache SET payload = ?1, fetched_at = ?2, last_attempt_at = ?2 WHERE id = 1"
+    "INSERT INTO dtek_address_cache (id, payload, fetched_at, last_attempt_at) " +
+    "VALUES (1, ?1, ?2, ?2) " +
+    "ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, " +
+    "fetched_at = excluded.fetched_at, last_attempt_at = excluded.last_attempt_at"
   ).bind(JSON.stringify(result), now).run();
 
   return result;

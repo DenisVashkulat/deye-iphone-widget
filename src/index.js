@@ -699,19 +699,13 @@ async function fetchDtekAddressStatus(env) {
 
   const form = new URLSearchParams();
   form.set("method", "getHomeNum");
-  form.set("data[0][name]", "street");
-  form.set("data[0][value]", "вул. Заболотного Академіка");
-  const kyivNow = new Date().toLocaleString("en-GB", {
-    timeZone: "Europe/Kyiv",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23"
-  });
-  form.set("data[1][name]", "updateFact");
-  form.set("data[1][value]", kyivNow);
+  // Current DTEK AJAX protocol requires city, street and a Unix updateFact timestamp.
+  form.set("data[0][name]", "city");
+  form.set("data[0][value]", "м. Київ");
+  form.set("data[1][name]", "street");
+  form.set("data[1][value]", "вул. Заболотного Академіка");
+  form.set("data[2][name]", "updateFact");
+  form.set("data[2][value]", String(Math.floor(Date.now() / 1000)));
 
   const response = await fetch("https://www.dtek-kem.com.ua/ua/ajax", {
     method: "POST",
@@ -737,7 +731,14 @@ async function fetchDtekAddressStatus(env) {
   try {
     payload = JSON.parse(rawText);
   } catch {
-    throw new Error("ДТЕК повернув не JSON. Можливо, сесія застаріла або сайт показав захист від автоматичних запитів.");
+    const contentType = response.headers.get("content-type") || "unknown";
+    const preview = rawText.replace(/<[^>]*>/g, " ").replace(/\\s+/g, " ").trim().slice(0, 180);
+    throw new Error(
+      "ДТЕК повернув не JSON. HTTP " + response.status +
+      "; Content-Type: " + contentType +
+      "; URL: " + response.url +
+      "; відповідь: " + preview
+    );
   }
 
   const hasHouseMap = Boolean(payload && payload.data && typeof payload.data === "object" && !Array.isArray(payload.data));

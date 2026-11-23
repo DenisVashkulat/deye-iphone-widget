@@ -115,7 +115,7 @@
   </section>
   <section class="panel" id="dtek-panel">
     <div class="panel-title"><span class="ico">⚡</span> Графік відключень ДТЕК</div>
-    <div class="dtek-meta"><span>Академіка Заболотного, 58 · Київ</span><span>Група 29.1</span><span id="dtek-updated">Оновлюємо графік…</span></div>
+    <div class="dtek-meta"><span>Академіка Заболотного, 58 · Київ</span><span id="dtek-group">Група — перевіряємо адресу…</span><span id="dtek-updated">Оновлюємо графік…</span></div>
     <div class="dtek-days" id="dtek-days"><div class="empty">Завантажуємо графік відключень…</div></div>
     <div class="dtek-status" id="dtek-current">Перевіряємо поточний статус…</div>
     <div class="dtek-legend"><span><i style="background:#32c987"></i>Світло за графіком є</span><span><i style="background:#f06b76"></i>Планове відключення</span></div>
@@ -293,6 +293,8 @@ function dtekRenderDay(label, day){
   return '<div class="dtek-day"><div class="dtek-day-head"><strong>'+label+'</strong><span>'+date+'</span></div><div class="dtek-timeline">'+timeline+'</div><div class="dtek-intervals">'+chips+'</div></div>';
 }
 function renderDtekSchedule(data){
+  const groupLabel=el("dtek-group");
+  if(groupLabel)groupLabel.textContent="Група "+(data.group||"невідома")+" · за адресою YASNO";
   const days=el("dtek-days");
   days.innerHTML=dtekRenderDay("Сьогодні",data.today)+dtekRenderDay("Завтра",data.tomorrow);
   el("dtek-updated").textContent=(data.updatedOn

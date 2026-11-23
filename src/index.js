@@ -682,45 +682,50 @@ async function fetchYasnoAddressGroup() {
     return yasnoAddressGroupCache;
   }
   const base = { regionId: "25", dsoId: "902" };
-  const streetTerms = ["Заболотного", "Академіка"];
-  let streets = [];
+  const streetTerms = ["Заболотного", "Академіка Заболотного", "Академіка"];
+  let streetChoices = [];
   for (const query of streetTerms) {
-    streets = await yasnoAddressGet("streets", { ...base, query });
-    const match = streets.find(item => {
-      const value = String(item?.value || "").toLocaleLowerCase("uk-UA");
-      return value.includes("заболотного") && value.includes("академ");
+    const result = await yasnoAddressGet("streets", { ...base, query });
+    streetChoices = streetChoices.concat(result);
+    const match = result.find(item => {
+      const value = String(item?.value || "").toLocaleLowerCase("uk-UA").replace(/[’']/g, "");
+      return value.includes("заболот") && /^\\d+$/.test(String(item?.id));
     });
-    if (match && /^\d+$/.test(String(match.id))) {
-      const houses = await yasnoAddressGet("houses", { ...base, streetId: match.id, query: "58" });
-      const house = houses.find(item => String(item?.value || "").trim().toLocaleLowerCase("uk-UA") === "58");
-      if (!house || !/^\d+$/.test(String(house.id))) {
-        throw new Error("YASNO address directory: house 58 was not found for Akademika Zabolotnoho street");
-      }
-      const groupUrl = new URL("https://app.yasno.ua/api/blackout-service/public/shutdowns/addresses/v2/group");
-      for (const [key, value] of Object.entries({ ...base, streetId: match.id, houseId: house.id })) {
-        groupUrl.searchParams.set(key, String(value));
-      }
-      const response = await fetch(groupUrl.toString(), {
-        headers: { "Accept": "application/json", "Cache-Control": "no-cache, no-store" }
-      });
-      if (!response.ok) throw new Error(`YASNO address group lookup failed: HTTP ${response.status}`);
-      const result = await response.json();
-      if (!Number.isInteger(result?.group) || !Number.isInteger(result?.subgroup)) {
-        throw new Error("YASNO address directory returned no valid group for house 58");
-      }
-      yasnoAddressGroupCache = {
-        group: `${result.group}.${result.subgroup}`,
-        street: match.value,
-        house: house.value,
-        checkedAt: Date.now(),
-        source: "YASNO address directory"
-      };
-      return yasnoAddressGroupCache;
-    }
-  }
-  throw new Error("YASNO address directory: Akademika Zabolotnoho street was not found");
-}
+    if (!match) continue;
 
+    const houses = await yasnoAddressGet("houses", { ...base, streetId: match.id, query: "58" });
+    const house = houses.find(item => {
+      const value = String(item?.value || "").trim();
+      return /^58(?:\\s|$|[-а-я])/i.test(value) && /^\\d+$/.test(String(item?.id));
+    });
+    if (!house) {
+      throw new Error("YASNO address directory: house 58 was not found for street " + String(match.value || match.id));
+    }
+
+    const groupUrl = new URL("https://app.yasno.ua/api/blackout-service/public/shutdowns/addresses/v2/group");
+    for (const [key, value] of Object.entries({ ...base, streetId: match.id, houseId: house.id })) {
+      groupUrl.searchParams.set(key, String(value));
+    }
+    const response = await fetch(groupUrl.toString(), {
+      headers: { "Accept": "application/json", "Cache-Control": "no-cache, no-store" }
+    });
+    if (!response.ok) throw new Error(`YASNO address group lookup failed: HTTP ${response.status}`);
+    const resultGroup = await response.json();
+    if (!Number.isInteger(resultGroup?.group) || !Number.isInteger(resultGroup?.subgroup)) {
+      throw new Error("YASNO address directory returned no valid group for house 58");
+    }
+    yasnoAddressGroupCache = {
+      group: `${resultGroup.group}.${resultGroup.subgroup}`,
+      street: match.value,
+      house: house.value,
+      checkedAt: Date.now(),
+      source: "YASNO address directory"
+    };
+    return yasnoAddressGroupCache;
+  }
+  const examples = streetChoices.slice(0, 8).map(item => String(item?.value || "")).filter(Boolean).join("; ");
+  throw new Error("YASNO address directory: street not found. Returned examples: " + (examples || "no matching street results"));
+}
 async function fetchDtekSchedule() {
   // Resolve the address group from YASNO itself; never assume a stale DTEK group.
   const addressGroup = await fetchYasnoAddressGroup();

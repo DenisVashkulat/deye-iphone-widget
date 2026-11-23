@@ -685,6 +685,30 @@ async function fetchDtekSchedule() {
 }
 
 
+async function ensureDtekAddressCache(env) {
+  await env.DEYE_DB.prepare(
+    "CREATE TABLE IF NOT EXISTS dtek_address_cache (" +
+    "id INTEGER PRIMARY KEY CHECK (id = 1), payload TEXT, fetched_at INTEGER, last_attempt_at INTEGER)"
+  ).run();
+}
+
+async function readDtekAddressCache(env) {
+  await ensureDtekAddressCache(env);
+  const row = await env.DEYE_DB.prepare(
+    "SELECT payload, fetched_at, last_attempt_at FROM dtek_address_cache WHERE id = 1"
+  ).first();
+  if (!row?.payload) return null;
+  try {
+    return {
+      data: JSON.parse(row.payload),
+      fetchedAt: Number(row.fetched_at || 0),
+      lastAttemptAt: Number(row.last_attempt_at || 0)
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
 async function fetchDtekAddressStatus(env) {
   const cookie = env.DTEK_SESSION_COOKIE;
   const csrfToken = env.DTEK_CSRF_TOKEN;
@@ -697,15 +721,34 @@ async function fetchDtekAddressStatus(env) {
     };
   }
 
+  await ensureDtekAddressCache(env);
+  const now = Date.now();
+  const cached = await readDtekAddressCache(env);
+
+  // Avoid repeatedly hitting DTEK when its anti-bot layer is temporarily blocking requests.
+  if (cached?.data && cached.lastAttemptAt && now - cached.lastAttemptAt < 5 * 60 * 1000) {
+    return {
+      ...cached.data,
+      stale: true,
+      lastSuccessfulAt: cached.fetchedAt,
+      warning: "Показано останні успішно отримані дані ДТЕК. Наступна перевірка буде не раніше ніж через 5 хвилин."
+    };
+  }
+
+  await env.DEYE_DB.prepare(
+    "INSERT INTO dtek_address_cache (id, payload, fetched_at, last_attempt_at) " +
+    "VALUES (1, NULL, NULL, ?1) " +
+    "ON CONFLICT(id) DO UPDATE SET last_attempt_at = excluded.last_attempt_at"
+  ).bind(now).run();
+
   const form = new URLSearchParams();
   form.set("method", "getHomeNum");
-  // Current DTEK AJAX protocol requires city, street and a Unix updateFact timestamp.
   form.set("data[0][name]", "city");
   form.set("data[0][value]", "м. Київ");
   form.set("data[1][name]", "street");
   form.set("data[1][value]", "вул. Заболотного Академіка");
   form.set("data[2][name]", "updateFact");
-  form.set("data[2][value]", String(Math.floor(Date.now() / 1000)));
+  form.set("data[2][value]", String(Math.floor(now / 1000)));
 
   const response = await fetch("https://www.dtek-kem.com.ua/ua/ajax", {
     method: "POST",
@@ -742,25 +785,19 @@ async function fetchDtekAddressStatus(env) {
   }
 
   const hasHouseMap = Boolean(payload && payload.data && typeof payload.data === "object" && !Array.isArray(payload.data));
-  const resultAccepted = payload && (payload.result === true || payload.result === "true" || payload.result === 1);
-  if (!payload || !hasHouseMap || (payload.result === false && !hasHouseMap)) {
+  if (!payload || !hasHouseMap) {
     const diagnostic = {
       httpStatus: response.status,
       result: payload?.result ?? null,
-      resultType: typeof payload?.result,
       hasData: Boolean(payload?.data),
-      dataType: Array.isArray(payload?.data) ? "array" : typeof payload?.data,
       topLevelKeys: payload && typeof payload === "object" ? Object.keys(payload).slice(0, 12) : [],
-      rawLength: rawText.length,
-      dtekMessage: String(payload?.text || "").replace(/<[^>]*>/g, " ").replace(/\\s+/g, " ").trim().slice(0, 300)
+      rawLength: rawText.length
     };
     throw new Error("Відповідь AJAX ДТЕК не містить списку будинків: " + JSON.stringify(diagnostic));
   }
 
   const house = payload.data["58"];
-  if (!house) {
-    throw new Error("У списку ДТЕК немає будинку 58. Перевірте вибрану вулицю.");
-  }
+  if (!house) throw new Error("У списку ДТЕК немає будинку 58. Перевірте вибрану вулицю.");
 
   const reason = String(house.sub_type || "").trim();
   const startAt = String(house.start_date || "").trim();
@@ -771,10 +808,10 @@ async function fetchDtekAddressStatus(env) {
   const normalized = reason.toLocaleLowerCase("uk-UA");
   let kind = "none";
   if (active && /(аварійн|екстрен|невідклад)/i.test(normalized)) kind = "emergency";
-  else if (active && (outageType === "1" || /планов/i.test(normalized))) kind = "planned";
+  else if (active && (outageType === "1" || outageType === "2" || /планов|стабілізаційн/i.test(normalized))) kind = "planned";
   else if (active) kind = "other";
 
-  return {
+  const result = {
     ok: true,
     configured: true,
     address: "м. Київ, вул. Академіка Заболотного, 58 (ввід 1)",
@@ -790,8 +827,16 @@ async function fetchDtekAddressStatus(env) {
     expectedEndAt: expectedEndAt || null,
     outageType: outageType || null,
     updatedAt: payload.updateTimestamp || null,
-    source: "DTEK Kyiv Electric Networks address AJAX"
+    source: "DTEK Kyiv Electric Networks address AJAX",
+    stale: false,
+    lastSuccessfulAt: now
   };
+
+  await env.DEYE_DB.prepare(
+    "UPDATE dtek_address_cache SET payload = ?1, fetched_at = ?2, last_attempt_at = ?2 WHERE id = 1"
+  ).bind(JSON.stringify(result), now).run();
+
+  return result;
 }
 
 export default {
@@ -879,6 +924,20 @@ export default {
         return json(await fetchDtekAddressStatus(env));
       } catch (error) {
         console.error("DTEK address status error:", error);
+        try {
+          const cached = await readDtekAddressCache(env);
+          if (cached?.data) {
+            return json({
+              ...cached.data,
+              stale: true,
+              lastSuccessfulAt: cached.fetchedAt,
+              warning: "ДТЕК тимчасово недоступний. Показано останні успішно отримані дані; перевірте час останнього оновлення.",
+              refreshError: error.message || "DTEK request failed"
+            });
+          }
+        } catch (cacheError) {
+          console.error("Could not read DTEK address cache:", cacheError.message);
+        }
         return json({ ok: false, error: error.message || "Could not load DTEK address status" }, 502);
       }
     }

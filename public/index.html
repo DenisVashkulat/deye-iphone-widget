@@ -332,7 +332,12 @@ function renderDtekAddress(data){
     updated.textContent="Очікує налаштування";
     return;
   }
-  updated.textContent=data.updatedAt?"Оновлено ДТЕК: "+data.updatedAt:"Час оновлення невідомий";
+  updated.textContent=data.stale
+    ?"Збережені дані · "+(data.lastSuccessfulAt?fmtDate(data.lastSuccessfulAt,true):"час невідомий")
+    :(data.updatedAt?"Оновлено ДТЕК: "+data.updatedAt:"Час оновлення невідомий");
+  const staleNotice=data.stale
+    ?"\n⚠ ДТЕК тимчасово недоступний. Показано останні збережені дані від "+(data.lastSuccessfulAt?fmtDate(data.lastSuccessfulAt,true):"невідомого часу")+". Перевірте актуальність на сайті ДТЕК."
+    :"";
   if(!data.active){
     box.className="dtek-address-card none";
     const group=data.fallbackGroup||((data.groups||[]).includes("GPV29.1")?"29.1":null);
@@ -340,6 +345,8 @@ function renderDtekAddress(data){
       ?"Окреме аварійне або адресне відключення для будинку 58 зараз не опубліковане. Для планових відключень використовуємо графік групи "+group+" — він показаний у блоці графіка нижче. Фактичну наявність світла перевіряє інвертор."
       :"Окреме повідомлення про відключення для будинку 58 зараз не опубліковане. Це не замінює фактичну перевірку наявності світла інвертором.";
     if(data.groups?.length)box.textContent+=" Група адреси: "+data.groups.join(", ")+".";
+    box.textContent+=staleNotice;
+    if(data.stale)box.className="dtek-address-card error";
     return;
   }
   box.className="dtek-address-card "+(data.kind||"");
@@ -349,7 +356,9 @@ function renderDtekAddress(data){
   if(data.startAt)lines.push("Початок: "+data.startAt);
   if(data.expectedEndAt)lines.push("Очікуване відновлення: "+data.expectedEndAt);
   if(data.groups?.length)lines.push("Група(и) адреси: "+data.groups.join(", "));
+  if(data.stale)lines.push(staleNotice.trim());
   box.textContent=lines.join("\n");
+  if(data.stale)box.className="dtek-address-card error";
 }
 async function refreshDtekAddress(){
   try{

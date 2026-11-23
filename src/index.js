@@ -690,10 +690,10 @@ async function fetchYasnoAddressGroup() {
       const value = String(item?.value || "").toLocaleLowerCase("uk-UA");
       return value.includes("заболотного") && value.includes("академ");
     });
-    if (match && /^\\d+$/.test(String(match.id))) {
+    if (match && /^\d+$/.test(String(match.id))) {
       const houses = await yasnoAddressGet("houses", { ...base, streetId: match.id, query: "58" });
       const house = houses.find(item => String(item?.value || "").trim().toLocaleLowerCase("uk-UA") === "58");
-      if (!house || !/^\\d+$/.test(String(house.id))) {
+      if (!house || !/^\d+$/.test(String(house.id))) {
         throw new Error("YASNO address directory: house 58 was not found for Akademika Zabolotnoho street");
       }
       const groupUrl = new URL("https://app.yasno.ua/api/blackout-service/public/shutdowns/addresses/v2/group");

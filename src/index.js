@@ -665,10 +665,17 @@ async function fetchBatteryDiagnostics(env) {
 }
 
 async function fetchDtekSchedule() {
-  const response = await fetch(
-    "https://app.yasno.ua/api/blackout-service/public/shutdowns/regions/25/dsos/902/planned-outages",
-    { headers: { "Accept": "application/json" }, cf: { cacheTtl: 300, cacheEverything: true } }
-  );
+  // Do not keep the public schedule in Cloudflare's edge cache:
+  // YASNO may publish a revised schedule during the day.
+  const url = new URL("https://app.yasno.ua/api/blackout-service/public/shutdowns/regions/25/dsos/902/planned-outages");
+  url.searchParams.set("_refresh", String(Date.now()));
+  const response = await fetch(url.toString(), {
+    headers: {
+      "Accept": "application/json",
+      "Cache-Control": "no-cache, no-store",
+      "Pragma": "no-cache"
+    }
+  });
   if (!response.ok) throw new Error(`YASNO schedule request failed: HTTP ${response.status}`);
   const data = await response.json();
   const group = data["29.1"];
@@ -680,6 +687,7 @@ async function fetchDtekSchedule() {
     today: group.today || null,
     tomorrow: group.tomorrow || null,
     updatedOn: group.updatedOn || null,
+    checkedAt: Date.now(),
     source: "YASNO public outage schedule"
   };
 }

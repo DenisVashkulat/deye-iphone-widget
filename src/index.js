@@ -664,9 +664,61 @@ async function fetchBatteryDiagnostics(env) {
   };
 }
 
+async function yasnoAddressGet(path, params) {
+  const url = new URL("https://app.yasno.ua/api/blackout-service/public/shutdowns/addresses/v2/" + path);
+  for (const [key, value] of Object.entries(params)) url.searchParams.set(key, String(value));
+  const response = await fetch(url.toString(), {
+    headers: { "Accept": "application/json", "Cache-Control": "no-cache, no-store" }
+  });
+  if (!response.ok) throw new Error(`YASNO address lookup ${path} failed: HTTP ${response.status}`);
+  const payload = await response.json();
+  if (!Array.isArray(payload)) throw new Error(`YASNO address lookup ${path}: unexpected response`);
+  return payload;
+}
+
+async function fetchYasnoAddressGroup() {
+  const base = { regionId: "25", dsoId: "902" };
+  const streetTerms = ["Заболотного", "Академіка"];
+  let streets = [];
+  for (const query of streetTerms) {
+    streets = await yasnoAddressGet("streets", { ...base, query });
+    const match = streets.find(item => {
+      const value = String(item?.value || "").toLocaleLowerCase("uk-UA");
+      return value.includes("заболотного") && value.includes("академ");
+    });
+    if (match && /^\\d+$/.test(String(match.id))) {
+      const houses = await yasnoAddressGet("houses", { ...base, streetId: match.id, query: "58" });
+      const house = houses.find(item => String(item?.value || "").trim().toLocaleLowerCase("uk-UA") === "58");
+      if (!house || !/^\\d+$/.test(String(house.id))) {
+        throw new Error("YASNO address directory: house 58 was not found for Akademika Zabolotnoho street");
+      }
+      const groupUrl = new URL("https://app.yasno.ua/api/blackout-service/public/shutdowns/addresses/v2/group");
+      for (const [key, value] of Object.entries({ ...base, streetId: match.id, houseId: house.id })) {
+        groupUrl.searchParams.set(key, String(value));
+      }
+      const response = await fetch(groupUrl.toString(), {
+        headers: { "Accept": "application/json", "Cache-Control": "no-cache, no-store" }
+      });
+      if (!response.ok) throw new Error(`YASNO address group lookup failed: HTTP ${response.status}`);
+      const result = await response.json();
+      if (!Number.isInteger(result?.group) || !Number.isInteger(result?.subgroup)) {
+        throw new Error("YASNO address directory returned no valid group for house 58");
+      }
+      return {
+        group: `${result.group}.${result.subgroup}`,
+        street: match.value,
+        house: house.value,
+        checkedAt: Date.now(),
+        source: "YASNO address directory"
+      };
+    }
+  }
+  throw new Error("YASNO address directory: Akademika Zabolotnoho street was not found");
+}
+
 async function fetchDtekSchedule() {
-  // Do not keep the public schedule in Cloudflare's edge cache:
-  // YASNO may publish a revised schedule during the day.
+  // Resolve the address group from YASNO itself; never assume a stale DTEK group.
+  const addressGroup = await fetchYasnoAddressGroup();
   const url = new URL("https://app.yasno.ua/api/blackout-service/public/shutdowns/regions/25/dsos/902/planned-outages");
   url.searchParams.set("_refresh", String(Date.now()));
   const response = await fetch(url.toString(), {
@@ -678,11 +730,13 @@ async function fetchDtekSchedule() {
   });
   if (!response.ok) throw new Error(`YASNO schedule request failed: HTTP ${response.status}`);
   const data = await response.json();
-  const group = data["29.1"];
-  if (!group) throw new Error("Schedule for group 29.1 was not found.");
+  const group = data[addressGroup.group];
+  if (!group) throw new Error(`Schedule for YASNO address group ${addressGroup.group} was not found.`);
   return {
     ok: true,
-    group: "29.1",
+    group: addressGroup.group,
+    groupSource: addressGroup.source,
+    groupCheckedAt: addressGroup.checkedAt,
     address: "м. Київ, вул. Академіка Заболотного, 58 (ввід 1)",
     today: group.today || null,
     tomorrow: group.tomorrow || null,

@@ -727,11 +727,14 @@ async function fetchDtekAddressStatus(env) {
 
   // Avoid repeatedly hitting DTEK when its anti-bot layer is temporarily blocking requests.
   if (cached?.data && cached.lastAttemptAt && now - cached.lastAttemptAt < 5 * 60 * 1000) {
+    const stale = now - cached.fetchedAt > 5 * 60 * 1000;
     return {
       ...cached.data,
-      stale: true,
+      stale,
       lastSuccessfulAt: cached.fetchedAt,
-      warning: "Показано останні успішно отримані дані ДТЕК. Наступна перевірка буде не раніше ніж через 5 хвилин."
+      warning: stale
+        ? "Показано останні успішно отримані дані ДТЕК. Наступна перевірка буде не раніше ніж через 5 хвилин."
+        : null
     };
   }
 

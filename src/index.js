@@ -3,6 +3,7 @@ import { buildPushPayload } from "@block65/webcrypto-web-push";
 const BASE_URL_DEFAULT = "https://eu1-developer.deyecloud.com";
 const CACHE_KEY = "latest";
 const CACHE_MAX_AGE_MS = 4 * 60 * 1000;
+let yasnoAddressGroupCache = null;
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), {
   status,
@@ -677,6 +678,9 @@ async function yasnoAddressGet(path, params) {
 }
 
 async function fetchYasnoAddressGroup() {
+  if (yasnoAddressGroupCache && Date.now() - yasnoAddressGroupCache.checkedAt < 60 * 60 * 1000) {
+    return yasnoAddressGroupCache;
+  }
   const base = { regionId: "25", dsoId: "902" };
   const streetTerms = ["Заболотного", "Академіка"];
   let streets = [];
@@ -704,13 +708,14 @@ async function fetchYasnoAddressGroup() {
       if (!Number.isInteger(result?.group) || !Number.isInteger(result?.subgroup)) {
         throw new Error("YASNO address directory returned no valid group for house 58");
       }
-      return {
+      yasnoAddressGroupCache = {
         group: `${result.group}.${result.subgroup}`,
         street: match.value,
         house: house.value,
         checkedAt: Date.now(),
         source: "YASNO address directory"
       };
+      return yasnoAddressGroupCache;
     }
   }
   throw new Error("YASNO address directory: Akademika Zabolotnoho street was not found");

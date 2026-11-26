@@ -297,10 +297,13 @@ function renderDtekSchedule(data){
   if(groupLabel)groupLabel.textContent="Група "+(data.group||"невідома")+" · за адресою YASNO";
   const days=el("dtek-days");
   days.innerHTML=dtekRenderDay("Сьогодні",data.today)+dtekRenderDay("Завтра",data.tomorrow);
+  days.dataset.loaded="true";
   el("dtek-updated").textContent=(data.updatedOn
     ?"Дані YASNO: "+new Date(data.updatedOn).toLocaleString("uk-UA",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})
     :"Час публікації YASNO невідомий")+(data.checkedAt
     ?" · перевірено: "+new Date(data.checkedAt).toLocaleTimeString("uk-UA",{hour:"2-digit",minute:"2-digit"})
+    :"")+(data.stale
+    ?" · ПОКАЗАНО КЕШ від "+(data.lastSuccessfulAt?fmtDate(data.lastSuccessfulAt,true):"невідомого часу")
     :"");
   const now=new Date();
   const kyivParts=new Intl.DateTimeFormat("en-GB",{timeZone:"Europe/Kyiv",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(now);
@@ -323,6 +326,12 @@ async function refreshDtekSchedule(){
     if(!response.ok||!data.ok)throw new Error(data.error||"Не вдалося отримати графік");
     renderDtekSchedule(data);
   }catch(error){
+    // Keep the last rendered schedule on screen instead of replacing it with
+    // an error after a temporary network/API failure.
+    if(el("dtek-days").dataset.loaded==="true"){
+      el("dtek-updated").textContent="Не вдалося оновити графік · показано останні дані";
+      return;
+    }
     el("dtek-days").innerHTML='<div class="empty error">Не вдалося завантажити графік ДТЕК: '+String(error.message).replace(/[<>]/g,"")+'</div>';
     el("dtek-current").textContent="Графік тимчасово недоступний.";
   }

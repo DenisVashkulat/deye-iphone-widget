@@ -885,8 +885,8 @@ async function fetchDtekAddressStatus(env) {
     throw new Error("Відповідь AJAX ДТЕК не містить списку будинків: " + JSON.stringify(diagnostic));
   }
 
-  const house = payload.data["58"];
-  if (!house) throw new Error("У списку ДТЕК немає будинків 56–58. Перевірте вибрану вулицю.");
+  const house = payload.data["56-58"] || payload.data["56–58"] || payload.data["56—58"];
+  if (!house) throw new Error("У списку ДТЕК немає окремого запису для будинків 56–58. Доступні записи: " + Object.keys(payload.data).slice(0, 30).join(", "));
 
   const reason = String(house.sub_type || "").trim();
   const startAt = String(house.start_date || "").trim();

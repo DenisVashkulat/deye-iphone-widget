@@ -863,7 +863,7 @@ async function fetchDtekAddressStatus(env) {
   // DTEK sometimes responds with an Incapsula/WAF HTML page using HTTP 200.
   // Treat it as a temporary source failure, never as "no outage"; the route
   // handler will return the last successful singleton-cache payload instead.
-  if (/text\/html/i.test(contentType) || /incapsula|request unsuccessful|security challenge/i.test(rawText)) {
+  if (contentType.toLowerCase().includes("text/html") || /incapsula|request unsuccessful|security challenge/i.test(rawText)) {
     throw new Error(
       "ДТЕК тимчасово блокує автоматичний запит (anti-bot/Incapsula). " +
       "Останні успішні дані збережені; повторна перевірка відбудеться пізніше."

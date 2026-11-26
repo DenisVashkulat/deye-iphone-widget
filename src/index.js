@@ -895,8 +895,32 @@ async function fetchDtekAddressStatus(env) {
     throw new Error("Відповідь AJAX ДТЕК не містить списку будинків: " + JSON.stringify(diagnostic));
   }
 
-  const house = payload.data["56-58"] || payload.data["56–58"] || payload.data["56—58"];
-  if (!house) throw new Error("У списку ДТЕК немає окремого запису для будинків 56–58. Доступні записи: " + Object.keys(payload.data).slice(0, 30).join(", "));
+  // Prefer an explicit DTEK range entry. If it is absent, combine houses 56 and 58
+  // only when all outage fields match exactly; never silently mix different schedules.
+  const rangeHouse = payload.data["56-58"] || payload.data["56–58"] || payload.data["56—58"];
+  const house56 = payload.data["56"];
+  const house58 = payload.data["58"];
+  let house = rangeHouse;
+  let combinedSeparateHouses = false;
+
+  if (!house && house56 && house58) {
+    const comparable = item => JSON.stringify({
+      sub_type: String(item.sub_type || "").trim(),
+      start_date: String(item.start_date || "").trim(),
+      end_date: String(item.end_date || "").trim(),
+      type: String(item.type || "").trim(),
+      sub_type_reason: Array.isArray(item.sub_type_reason) ? item.sub_type_reason.map(String).sort() : []
+    });
+    if (comparable(house56) !== comparable(house58)) {
+      throw new Error("Дані ДТЕК для будинків 56 і 58 відрізняються; спільний статус 56–58 не сформовано.");
+    }
+    house = house56;
+    combinedSeparateHouses = true;
+  }
+
+  if (!house) {
+    throw new Error("У відповіді ДТЕК немає ні загального запису 56–58, ні обох окремих записів 56 і 58. Доступні записи: " + Object.keys(payload.data).slice(0, 30).join(", "));
+  }
 
   const reason = String(house.sub_type || "").trim();
   const startAt = String(house.start_date || "").trim();
@@ -927,6 +951,7 @@ async function fetchDtekAddressStatus(env) {
     outageType: outageType || null,
     updatedAt: payload.updateTimestamp || null,
     source: "DTEK Kyiv Electric Networks address AJAX",
+    combinedSeparateHouses,
     stale: false,
     lastSuccessfulAt: now
   };

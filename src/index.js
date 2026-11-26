@@ -766,7 +766,7 @@ async function fetchDtekSchedule(env) {
 
   // The address was already confirmed as GPV29.1. Do not make schedule
   // availability depend on a fragile street/house directory lookup.
-  const groupId = env.DTEK_GROUP || "29.1";
+  const groupId = "29.1";
 
   // The UI polls every two minutes. Reuse the singleton cache between polls
   // and avoid unnecessary requests to YASNO.

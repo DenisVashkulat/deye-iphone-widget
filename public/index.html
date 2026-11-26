@@ -115,14 +115,14 @@
   </section>
   <section class="panel" id="dtek-panel">
     <div class="panel-title"><span class="ico">⚡</span> Графік відключень ДТЕК</div>
-    <div class="dtek-meta"><span>Академіка Заболотного, 58 · Київ</span><span id="dtek-group">Група — перевіряємо адресу…</span><span id="dtek-updated">Оновлюємо графік…</span></div>
+    <div class="dtek-meta"><span>Академіка Заболотного, 56–58 · Київ</span><span id="dtek-group">Група — перевіряємо адресу…</span><span id="dtek-updated">Оновлюємо графік…</span></div>
     <div class="dtek-days" id="dtek-days"><div class="empty">Завантажуємо графік відключень…</div></div>
     <div class="dtek-status" id="dtek-current">Перевіряємо поточний статус…</div>
     <div class="dtek-legend"><span><i style="background:#32c987"></i>Світло за графіком є</span><span><i style="background:#f06b76"></i>Планове відключення</span></div>
   </section>
   <section class="panel" id="dtek-address-panel">
     <div class="panel-title"><span class="ico">⚠</span> Адресні та аварійні відключення ДТЕК</div>
-    <div class="dtek-meta"><span>Академіка Заболотного, 58 · ввід 1</span><span id="dtek-address-updated">Перевіряємо адресу…</span></div>
+    <div class="dtek-meta"><span>Академіка Заболотного, 56–58 · ввід 1</span><span id="dtek-address-updated">Перевіряємо адресу…</span></div>
     <div class="dtek-address-card" id="dtek-address-status">Завантажуємо адресну інформацію ДТЕК…</div>
   </section>
 </main>
@@ -346,8 +346,8 @@ function renderDtekAddress(data){
     box.className="dtek-address-card none";
     const group=data.fallbackGroup||((data.groups||[]).includes("GPV29.1")?"29.1":null);
     box.textContent=group
-      ?"Окреме аварійне або адресне відключення для будинку 58 зараз не опубліковане. Для планових відключень використовуємо графік групи "+group+" — він показаний у блоці графіка нижче. Фактичну наявність світла перевіряє інвертор."
-      :"Окреме повідомлення про відключення для будинку 58 зараз не опубліковане. Це не замінює фактичну перевірку наявності світла інвертором.";
+      ?"Окреме аварійне або адресне відключення для будинків 56–58 зараз не опубліковане. Для планових відключень використовуємо графік групи "+group+" — він показаний у блоці графіка нижче. Фактичну наявність світла перевіряє інвертор."
+      :"Окреме повідомлення про відключення для будинків 56–58 зараз не опубліковане. Це не замінює фактичну перевірку наявності світла інвертором.";
     if(data.groups?.length)box.textContent+=" Група адреси: "+data.groups.join(", ")+".";
     box.textContent+=staleNotice;
     if(data.stale)box.className="dtek-address-card error";

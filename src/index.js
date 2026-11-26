@@ -833,7 +833,7 @@ async function ingestDtekAddressStatus(request, env) {
   if (JSON.stringify(a) !== JSON.stringify(b)) {
     return json({ ok: false, error: "DTEK data for houses 56 and 58 differ; combined status was not saved." }, 409);
   }
-  if (!a.groups.length || a.groups.some(group => !/^GPV\\d+\\.\\d+$/i.test(group))) {
+  if (!a.groups.length || a.groups.some(group => !/^GPV\d+\.\d+$/i.test(group))) {
     return json({ ok: false, error: "Invalid DTEK group data" }, 400);
   }
 

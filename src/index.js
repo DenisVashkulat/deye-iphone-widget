@@ -795,6 +795,100 @@ async function readDtekAddressCache(env) {
   }
 }
 
+
+async function ingestDtekAddressStatus(request, env) {
+  const expectedKey = env.DTEK_INGEST_SECRET;
+  const suppliedKey = request.headers.get("X-DTEK-Ingest-Key") || "";
+  if (!expectedKey || suppliedKey.length !== expectedKey.length || suppliedKey !== expectedKey) {
+    return json({ ok: false, error: "Unauthorized" }, 401);
+  }
+
+  const contentLength = Number(request.headers.get("Content-Length") || 0);
+  if (contentLength > 16000) return json({ ok: false, error: "Payload too large" }, 413);
+
+  let body;
+  try {
+    body = await request.json();
+  } catch (_) {
+    return json({ ok: false, error: "Invalid JSON" }, 400);
+  }
+
+  const house56 = body?.houses?.["56"];
+  const house58 = body?.houses?.["58"];
+  const observedAt = Number(body?.observedAt);
+  if (!house56 || !house58 || !Number.isFinite(observedAt) || observedAt <= 0) {
+    return json({ ok: false, error: "Both house records and observedAt are required" }, 400);
+  }
+
+  const normalize = item => ({
+    groups: Array.isArray(item.groups) ? item.groups.map(String).sort() : [],
+    hasCurrentOutage: item.hasCurrentOutage === true,
+    reason: String(item.reason || "").trim(),
+    startAt: String(item.startAt || "").trim(),
+    expectedEndAt: String(item.expectedEndAt || "").trim(),
+    outageType: String(item.outageType || "").trim()
+  });
+  const a = normalize(house56);
+  const b = normalize(house58);
+  if (JSON.stringify(a) !== JSON.stringify(b)) {
+    return json({ ok: false, error: "DTEK data for houses 56 and 58 differ; combined status was not saved." }, 409);
+  }
+  if (!a.groups.length || a.groups.some(group => !/^GPV\\d+\\.\\d+$/i.test(group))) {
+    return json({ ok: false, error: "Invalid DTEK group data" }, 400);
+  }
+
+  const now = Date.now();
+  if (observedAt > now + 5 * 60 * 1000 || now - observedAt > 2 * 60 * 60 * 1000) {
+    return json({ ok: false, error: "DTEK observation is outside the accepted time window" }, 409);
+  }
+
+  await ensureDtekAddressCache(env);
+  const cached = await readDtekAddressCache(env);
+  const previousObservedAt = Number(cached?.data?.sourceObservedAt || 0);
+  if (observedAt < previousObservedAt) {
+    return json({ ok: false, error: "Older DTEK observation ignored", lastObservedAt: previousObservedAt }, 409);
+  }
+
+  const active = a.hasCurrentOutage || Boolean(a.reason || a.startAt || a.expectedEndAt || a.outageType);
+  const normalizedReason = a.reason.toLocaleLowerCase("uk-UA");
+  let kind = "none";
+  if (active && /(аварійн|екстрен|невідклад)/i.test(normalizedReason)) kind = "emergency";
+  else if (active && (a.outageType === "1" || a.outageType === "2" || /планов|стабілізаційн/i.test(normalizedReason))) kind = "planned";
+  else if (active) kind = "other";
+
+  const result = {
+    ok: true,
+    configured: true,
+    address: "м. Київ, вул. Академіка Заболотного, 56–58 (ввід 1)",
+    houseNumber: "56–58",
+    entrance: "1",
+    groups: a.groups,
+    active,
+    addressSpecific: true,
+    fallbackGroup: null,
+    kind,
+    reason: a.reason || (active ? "ДТЕК повідомляє про роботи/відключення без уточненої причини" : ""),
+    startAt: a.startAt || null,
+    expectedEndAt: a.expectedEndAt || null,
+    outageType: a.outageType || null,
+    updatedAt: body.sourceUpdatedAt || null,
+    source: "DTEK Kyiv Electric Networks via GitHub Actions",
+    combinedSeparateHouses: true,
+    stale: false,
+    lastSuccessfulAt: now,
+    sourceObservedAt: observedAt
+  };
+
+  await env.DEYE_DB.prepare(
+    "INSERT INTO dtek_address_cache (id, payload, fetched_at, last_attempt_at) " +
+    "VALUES (1, ?1, ?2, ?2) " +
+    "ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, " +
+    "fetched_at = excluded.fetched_at, last_attempt_at = excluded.last_attempt_at"
+  ).bind(JSON.stringify(result), now).run();
+
+  return json({ ok: true, saved: true, address: result.address, groups: result.groups, active: result.active, fetchedAt: now });
+}
+
 async function fetchDtekAddressStatus(env) {
   const cookie = env.DTEK_SESSION_COOKIE;
   const csrfToken = env.DTEK_CSRF_TOKEN;
@@ -1043,6 +1137,15 @@ export default {
       } catch (error) {
         console.error("DTEK schedule error:", error);
         return json({ error: error.message || "Could not load DTEK schedule" }, 502);
+      }
+    }
+    if (url.pathname === "/api/dtek-ingest") {
+      if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+      try {
+        return await ingestDtekAddressStatus(request, env);
+      } catch (error) {
+        console.error("DTEK ingest error:", error);
+        return json({ ok: false, error: error.message || "Could not save DTEK status" }, 500);
       }
     }
     if (url.pathname === "/api/dtek-address") {

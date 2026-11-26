@@ -802,7 +802,7 @@ async function fetchDtekAddressStatus(env) {
     return {
       ok: true,
       configured: false,
-      address: "м. Київ, вул. Академіка Заболотного, 58 (ввід 1)",
+      address: "м. Київ, вул. Академіка Заболотного, 56–58 (ввід 1)",
       message: "Адресний запит ДТЕК ще не налаштовано. Потрібні DTEK_SESSION_COOKIE та DTEK_CSRF_TOKEN у Cloudflare Worker Secrets."
     };
   }
@@ -903,13 +903,13 @@ async function fetchDtekAddressStatus(env) {
   const result = {
     ok: true,
     configured: true,
-    address: "м. Київ, вул. Академіка Заболотного, 58 (ввід 1)",
+    address: "м. Київ, вул. Академіка Заболотного, 56–58 (ввід 1)",
     houseNumber: "56–58",
     entrance: "1",
     groups,
     active,
     addressSpecific: active,
-    fallbackGroup: !active && groups.includes("GPV29.1") ? "29.1" : null,
+    fallbackGroup: !active && groups.length ? String(groups[0]).replace(/^GPV/i, "") : null,
     kind,
     reason: reason || (active ? "ДТЕК повідомляє про роботи/відключення без уточненої причини" : ""),
     startAt: startAt || null,

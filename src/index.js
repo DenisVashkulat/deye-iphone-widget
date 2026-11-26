@@ -689,17 +689,25 @@ async function fetchYasnoAddressGroup() {
     streetChoices = streetChoices.concat(result);
     const match = result.find(item => {
       const value = String(item?.value || "").toLocaleLowerCase("uk-UA").replace(/[’']/g, "");
-      return value.includes("заболот") && /^\d+$/.test(String(item?.id));
+      return value.includes("заболот") && item?.id !== undefined && item?.id !== null && String(item.id).trim() !== "";
     });
     if (!match) continue;
 
-    const houses = await yasnoAddressGet("houses", { ...base, streetId: match.id, query: "58" });
-    const house = houses.find(item => {
-      const value = String(item?.value || "").trim();
-      return /^58(?:\s|$|[-а-я])/i.test(value) && /^\d+$/.test(String(item?.id));
-    });
+    const houseQueries = ["56-58", "56–58", "56", "58"];
+    let houses = [];
+    let house = null;
+    for (const houseQuery of houseQueries) {
+      const found = await yasnoAddressGet("houses", { ...base, streetId: match.id, query: houseQuery });
+      houses = houses.concat(found);
+      house = found.find(item => {
+        const value = String(item?.value || "").trim().replace(/[–—]/g, "-").replace(/\s+/g, "");
+        return /^56-58(?:$|[А-ЯA-Z])/i.test(value) && item?.id !== undefined && item?.id !== null && String(item.id).trim() !== "";
+      });
+      if (house) break;
+    }
     if (!house) {
-      throw new Error("YASNO address directory: house 58 was not found for street " + String(match.value || match.id));
+      const examples = houses.slice(0, 10).map(item => String(item?.value || "")).filter(Boolean).join("; ");
+      throw new Error("YASNO address directory: house range 56-58 was not found for street " + String(match.value || match.id) + (examples ? ". Returned houses: " + examples : ""));
     }
 
     const groupUrl = new URL("https://app.yasno.ua/api/blackout-service/public/shutdowns/addresses/v2/group");
@@ -712,7 +720,7 @@ async function fetchYasnoAddressGroup() {
     if (!response.ok) throw new Error(`YASNO address group lookup failed: HTTP ${response.status}`);
     const resultGroup = await response.json();
     if (!Number.isInteger(resultGroup?.group) || !Number.isInteger(resultGroup?.subgroup)) {
-      throw new Error("YASNO address directory returned no valid group for house 58");
+      throw new Error("YASNO address directory returned no valid group for house range 56-58");
     }
     yasnoAddressGroupCache = {
       group: `${resultGroup.group}.${resultGroup.subgroup}`,
@@ -747,7 +755,7 @@ async function fetchDtekSchedule() {
     group: addressGroup.group,
     groupSource: addressGroup.source,
     groupCheckedAt: addressGroup.checkedAt,
-    address: "м. Київ, вул. Академіка Заболотного, 58 (ввід 1)",
+    address: "м. Київ, вул. Академіка Заболотного, 56–58 (ввід 1)",
     today: group.today || null,
     tomorrow: group.tomorrow || null,
     updatedOn: group.updatedOn || null,
@@ -878,7 +886,7 @@ async function fetchDtekAddressStatus(env) {
   }
 
   const house = payload.data["58"];
-  if (!house) throw new Error("У списку ДТЕК немає будинку 58. Перевірте вибрану вулицю.");
+  if (!house) throw new Error("У списку ДТЕК немає будинків 56–58. Перевірте вибрану вулицю.");
 
   const reason = String(house.sub_type || "").trim();
   const startAt = String(house.start_date || "").trim();
@@ -896,7 +904,7 @@ async function fetchDtekAddressStatus(env) {
     ok: true,
     configured: true,
     address: "м. Київ, вул. Академіка Заболотного, 58 (ввід 1)",
-    houseNumber: "58",
+    houseNumber: "56–58",
     entrance: "1",
     groups,
     active,

@@ -892,20 +892,12 @@ async function ingestDtekAddressStatus(request, env) {
 async function fetchDtekAddressStatus(env) {
   const cookie = env.DTEK_SESSION_COOKIE;
   const csrfToken = env.DTEK_CSRF_TOKEN;
-  if (!cookie || !csrfToken) {
-    return {
-      ok: true,
-      configured: false,
-      address: "м. Київ, вул. Академіка Заболотного, 56–58 (ввід 1)",
-      message: "Адресний запит ДТЕК ще не налаштовано. Потрібні DTEK_SESSION_COOKIE та DTEK_CSRF_TOKEN у Cloudflare Worker Secrets."
-    };
-  }
 
   await ensureDtekAddressCache(env);
   const now = Date.now();
   const cached = await readDtekAddressCache(env);
 
-  // Avoid repeatedly hitting DTEK when its anti-bot layer is temporarily blocking requests.
+  // Prefer the latest externally ingested result and avoid repeated DTEK requests.
   if (cached?.data && cached.lastAttemptAt && now - cached.lastAttemptAt < 5 * 60 * 1000) {
     const stale = now - cached.fetchedAt > 5 * 60 * 1000;
     return {
@@ -915,6 +907,26 @@ async function fetchDtekAddressStatus(env) {
       warning: stale
         ? "Показано останні успішно отримані дані ДТЕК. Наступна перевірка буде не раніше ніж через 5 хвилин."
         : null
+    };
+  }
+
+  // GitHub Actions can refresh the address cache without DTEK browser-session secrets.
+  // If those secrets are absent, keep serving the last known result instead of hiding it.
+  if (!cookie || !csrfToken) {
+    if (cached?.data) {
+      const stale = now - cached.fetchedAt > 5 * 60 * 1000;
+      return {
+        ...cached.data,
+        stale,
+        lastSuccessfulAt: cached.fetchedAt,
+        warning: stale ? "Показано останні успішно отримані дані ДТЕК. Джерело тимчасово не оновило інформацію." : null
+      };
+    }
+    return {
+      ok: true,
+      configured: false,
+      address: "м. Київ, вул. Академіка Заболотного, 56–58 (ввід 1)",
+      message: "Адресний запит ДТЕК ще не налаштовано. Очікується перше оновлення через GitHub Actions."
     };
   }
 

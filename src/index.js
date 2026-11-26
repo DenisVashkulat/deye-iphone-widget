@@ -734,34 +734,113 @@ async function fetchYasnoAddressGroup() {
   const examples = streetChoices.slice(0, 8).map(item => String(item?.value || "")).filter(Boolean).join("; ");
   throw new Error("YASNO address directory: street not found. Returned examples: " + (examples || "no matching street results"));
 }
-async function fetchDtekSchedule() {
-  // Resolve the address group from YASNO itself; never assume a stale DTEK group.
-  const addressGroup = await fetchYasnoAddressGroup();
-  const url = new URL("https://app.yasno.ua/api/blackout-service/public/shutdowns/regions/25/dsos/902/planned-outages");
-  url.searchParams.set("_refresh", String(Date.now()));
-  const response = await fetch(url.toString(), {
-    headers: {
-      "Accept": "application/json",
-      "Cache-Control": "no-cache, no-store",
-      "Pragma": "no-cache"
+async function ensureDtekScheduleCache(env) {
+  await env.DEYE_DB.prepare(
+    "CREATE TABLE IF NOT EXISTS dtek_schedule_cache (" +
+    "id INTEGER PRIMARY KEY CHECK (id = 1), payload TEXT, fetched_at INTEGER, last_attempt_at INTEGER)"
+  ).run();
+  await env.DEYE_DB.prepare("DELETE FROM dtek_schedule_cache WHERE id <> 1").run();
+}
+
+async function readDtekScheduleCache(env) {
+  await ensureDtekScheduleCache(env);
+  const row = await env.DEYE_DB.prepare(
+    "SELECT payload, fetched_at, last_attempt_at FROM dtek_schedule_cache WHERE id = 1"
+  ).first();
+  if (!row?.payload) return null;
+  try {
+    return {
+      data: JSON.parse(row.payload),
+      fetchedAt: Number(row.fetched_at || 0),
+      lastAttemptAt: Number(row.last_attempt_at || 0)
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+async function fetchDtekSchedule(env) {
+  await ensureDtekScheduleCache(env);
+  const now = Date.now();
+  const cached = await readDtekScheduleCache(env);
+
+  // The address was already confirmed as GPV29.1. Do not make schedule
+  // availability depend on a fragile street/house directory lookup.
+  const groupId = env.DTEK_GROUP || "29.1";
+
+  // The UI polls every two minutes. Reuse the singleton cache between polls
+  // and avoid unnecessary requests to YASNO.
+  if (cached?.data && cached.lastAttemptAt && now - cached.lastAttemptAt < 90 * 1000) {
+    return {
+      ...cached.data,
+      stale: false,
+      lastSuccessfulAt: cached.fetchedAt,
+      cacheAgeSeconds: Math.max(0, Math.floor((now - cached.fetchedAt) / 1000))
+    };
+  }
+
+  await env.DEYE_DB.prepare(
+    "INSERT INTO dtek_schedule_cache (id, payload, fetched_at, last_attempt_at) " +
+    "VALUES (1, NULL, NULL, ?1) " +
+    "ON CONFLICT(id) DO UPDATE SET last_attempt_at = excluded.last_attempt_at"
+  ).bind(now).run();
+
+  try {
+    const url = new URL("https://app.yasno.ua/api/blackout-service/public/shutdowns/regions/25/dsos/902/planned-outages");
+    url.searchParams.set("_refresh", String(now));
+    const response = await fetch(url.toString(), {
+      headers: {
+        "Accept": "application/json",
+        "Cache-Control": "no-cache, no-store",
+        "Pragma": "no-cache"
+      }
+    });
+    if (!response.ok) throw new Error(`YASNO schedule request failed: HTTP ${response.status}`);
+    const data = await response.json();
+    const group = data?.[groupId];
+    if (!group) throw new Error(`Schedule for fixed YASNO group ${groupId} was not found.`);
+
+    const hasToday = Array.isArray(group.today?.slots) && group.today.slots.length > 0;
+    const hasTomorrow = Array.isArray(group.tomorrow?.slots) && group.tomorrow.slots.length > 0;
+    if (!hasToday && !hasTomorrow) {
+      throw new Error(`YASNO returned an empty schedule for group ${groupId}; previous data was preserved.`);
     }
-  });
-  if (!response.ok) throw new Error(`YASNO schedule request failed: HTTP ${response.status}`);
-  const data = await response.json();
-  const group = data[addressGroup.group];
-  if (!group) throw new Error(`Schedule for YASNO address group ${addressGroup.group} was not found.`);
-  return {
-    ok: true,
-    group: addressGroup.group,
-    groupSource: addressGroup.source,
-    groupCheckedAt: addressGroup.checkedAt,
-    address: "м. Київ, вул. Академіка Заболотного, 56–58 (ввід 1)",
-    today: group.today || null,
-    tomorrow: group.tomorrow || null,
-    updatedOn: group.updatedOn || null,
-    checkedAt: Date.now(),
-    source: "YASNO public outage schedule"
-  };
+
+    const result = {
+      ok: true,
+      group: groupId,
+      groupSource: "закріплена група",
+      groupCheckedAt: cached?.fetchedAt || now,
+      address: "м. Київ, вул. Академіка Заболотного, 56–58 (ввід 1)",
+      today: group.today || null,
+      tomorrow: group.tomorrow || null,
+      updatedOn: group.updatedOn || null,
+      checkedAt: now,
+      source: "YASNO public outage schedule",
+      stale: false
+    };
+
+    await env.DEYE_DB.prepare(
+      "INSERT INTO dtek_schedule_cache (id, payload, fetched_at, last_attempt_at) " +
+      "VALUES (1, ?1, ?2, ?2) " +
+      "ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, " +
+      "fetched_at = excluded.fetched_at, last_attempt_at = excluded.last_attempt_at"
+    ).bind(JSON.stringify(result), now).run();
+
+    return { ...result, lastSuccessfulAt: now, cacheAgeSeconds: 0 };
+  } catch (error) {
+    if (cached?.data) {
+      return {
+        ...cached.data,
+        stale: true,
+        lastSuccessfulAt: cached.fetchedAt,
+        cacheAgeSeconds: Math.max(0, Math.floor((now - cached.fetchedAt) / 1000)),
+        warning: "YASNO тимчасово недоступний. Показано останній успішно отриманий графік.",
+        refreshError: error.message || "YASNO schedule request failed"
+      };
+    }
+    throw error;
+  }
 }
 
 
@@ -1004,7 +1083,7 @@ export default {
       if (request.method === "OPTIONS") return json({ ok: true });
       if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
       try {
-        return json(await fetchDtekSchedule());
+        return json(await fetchDtekSchedule(env));
       } catch (error) {
         console.error("DTEK schedule error:", error);
         return json({ error: error.message || "Could not load DTEK schedule" }, 502);

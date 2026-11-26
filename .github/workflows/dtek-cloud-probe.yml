@@ -1,84 +1,113 @@
-name: DTEK cloud connectivity probe
+name: DTEK address refresh
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "*/5 * * * *"
 
 permissions:
   contents: read
 
+concurrency:
+  group: dtek-address-refresh
+  cancel-in-progress: true
+
 jobs:
-  probe:
+  refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 4
     steps:
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
       - name: Install DTEK client
         run: python -m pip install --disable-pip-version-check "dtek-blackout-client==0.2.1"
 
-      - name: Test standard HTTP access and address data
+      - name: Fetch DTEK address status and update Deye Monitor
+        env:
+          DTEK_INGEST_SECRET: ${{ secrets.DTEK_INGEST_SECRET }}
         run: |
           python - <<'PY'
           import asyncio
+          import json
+          import os
+          import time
+          import urllib.error
+          import urllib.request
           from dtek_client import DtekClient
 
           CITY = "м. Київ"
+          WORKER_INGEST_URL = "https://deye-iphone-widget.denis0672706583.workers.dev/api/dtek-ingest"
 
-          async def main():
-              print("Probe: DTEK Kyiv City (kem)")
+          def house_payload(entry):
+              return {
+                  "groups": list(entry.group_ids or []),
+                  "hasCurrentOutage": bool(entry.has_current_outage),
+                  "reason": entry.sub_type or "",
+                  "startAt": entry.start_date or "",
+                  "expectedEndAt": entry.end_date or "",
+                  "outageType": entry.outage_type or "",
+              }
+
+          async def fetch_status():
               async with DtekClient("kem", retry_attempts=1) as client:
                   streets = await client.get_streets()
-                  print(f"HTTP/API: getStreets OK; streets returned: {len(streets)}")
-                  matches = [s.name for s in streets if "заболот" in s.name.casefold()]
-                  print(f"Matching street names: {matches[:10]}")
-                  if not matches:
-                      raise RuntimeError("Akademika Zabolotnoho street was not found in DTEK directory")
-
                   street = next(
                       (s.name for s in streets
                        if "заболот" in s.name.casefold() and "академіка" in s.name.casefold()),
-                      matches[0],
+                      None,
                   )
-                  print(f"Using canonical DTEK street name: {street}")
+                  if not street:
+                      raise RuntimeError("Canonical Akademika Zabolotnoho street not found in DTEK directory")
 
+                  print(f"Using DTEK directory street: {street}")
                   response = await client.get_home_num(CITY, street)
-                  print(f"HTTP/API: getHomeNum OK; house records: {len(response.houses)}")
+                  entry56 = response.find_house("56")
+                  entry58 = response.find_house("58")
+                  if entry56 is None or entry58 is None:
+                      raise RuntimeError("DTEK response does not contain both houses 56 and 58")
 
-                  entries = {}
-                  for number in ("56", "58"):
-                      entry = response.find_house(number)
-                      entries[number] = entry
-                      if entry is None:
-                          print(f"House {number}: NOT FOUND")
-                          continue
-                      print(
-                          f"House {number}: groups={entry.group_ids}; "
-                          f"has_current_outage={entry.has_current_outage}; "
-                          f"sub_type={entry.sub_type!r}; "
-                          f"start={entry.start_date!r}; end={entry.end_date!r}; "
-                          f"type={entry.outage_type!r}"
-                      )
+                  house56 = house_payload(entry56)
+                  house58 = house_payload(entry58)
+                  if house56 != house58:
+                      raise RuntimeError("DTEK data for houses 56 and 58 differ; refusing to publish a combined status")
 
-                  a, b = entries["56"], entries["58"]
-                  if a is None or b is None:
-                      raise RuntimeError("Could not find both houses 56 and 58 in DTEK response")
+                  print("House 56/58 match: yes")
+                  print(f"Groups: {house56['groups']}")
+                  print(f"Current outage: {house56['hasCurrentOutage']}")
+                  print(f"Reason: {house56['reason'] or 'none'}")
+                  print(f"Period: {house56['startAt'] or 'n/a'} — {house56['expectedEndAt'] or 'n/a'}")
+                  return {"houses": {"56": house56, "58": house58}, "observedAt": int(time.time() * 1000)}
 
-                  same = (
-                      a.group_ids == b.group_ids
-                      and a.sub_type == b.sub_type
-                      and a.start_date == b.start_date
-                      and a.end_date == b.end_date
-                      and a.outage_type == b.outage_type
-                  )
-                  print(f"House 56/58 address data identical: {same}")
-                  print("RESULT: PASS — standard HTTP API access succeeded")
+          async def main():
+              secret = os.environ.get("DTEK_INGEST_SECRET", "")
+              if len(secret) < 32:
+                  raise RuntimeError("GitHub Actions secret DTEK_INGEST_SECRET is missing or too short (minimum 32 characters)")
 
-          try:
-              asyncio.run(main())
-          except Exception as exc:
-              print(f"RESULT: FAIL — {type(exc).__name__}: {str(exc)[:300]}")
-              raise
+              payload = await fetch_status()
+              request = urllib.request.Request(
+                  WORKER_INGEST_URL,
+                  data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                  headers={
+                      "Content-Type": "application/json",
+                      "X-DTEK-Ingest-Key": secret,
+                      "User-Agent": "Deye-Monitor-DTEK-Refresh/1.0",
+                  },
+                  method="POST",
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=25) as response:
+                      result = json.loads(response.read().decode("utf-8"))
+                      print(f"Worker response HTTP {response.status}: {json.dumps(result, ensure_ascii=False)}")
+                      if response.status != 200 or not result.get("ok") or not result.get("saved"):
+                          raise RuntimeError("Cloudflare Worker did not confirm saving the DTEK status")
+              except urllib.error.HTTPError as error:
+                  detail = error.read().decode("utf-8", errors="replace")[:500]
+                  raise RuntimeError(f"Worker ingest failed: HTTP {error.code}: {detail}") from error
+
+              print("RESULT: PASS — DTEK status delivered to Deye Monitor")
+
+          asyncio.run(main())
           PY

@@ -294,7 +294,7 @@ function dtekRenderDay(label, day){
 }
 function renderDtekSchedule(data){
   const groupLabel=el("dtek-group");
-  if(groupLabel)groupLabel.textContent="Група "+(data.group||"невідома")+" · за адресою YASNO";
+  if(groupLabel)groupLabel.textContent="Група "+(data.group||"невідома")+" · закріплена для адреси";
   const days=el("dtek-days");
   days.innerHTML=dtekRenderDay("Сьогодні",data.today)+dtekRenderDay("Завтра",data.tomorrow);
   days.dataset.loaded="true";

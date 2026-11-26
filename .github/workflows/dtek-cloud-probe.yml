@@ -26,7 +26,6 @@ jobs:
           from dtek_client import DtekClient
 
           CITY = "м. Київ"
-          STREET = "вул. Заболотного Академіка"
 
           async def main():
               print("Probe: DTEK Kyiv City (kem)")
@@ -35,7 +34,11 @@ jobs:
                   print(f"HTTP/API: getStreets OK; streets returned: {len(streets)}")
                   matches = [s.name for s in streets if "заболот" in s.name.casefold()]
                   print(f"Matching street names: {matches[:10]}")
-                  response = await client.get_home_num(CITY, STREET)
+                  if not matches:
+                      raise RuntimeError("Akademika Zabolotnoho street was not found in DTEK directory")
+                  street = next((s.name for s in streets if "заболот" in s.name.casefold() and "академіка" in s.name.casefold()), matches[0])
+                  print(f"Using canonical DTEK street name: {street}")
+                  response = await client.get_home_num(CITY, street)
                   print(f"HTTP/API: getHomeNum OK; house records: {len(response.houses)}")
                   for number in ("56", "58"):
                       entry = response.find_house(number)

@@ -734,8 +734,8 @@ async function fetchYasnoAddressGroup() {
   const examples = streetChoices.slice(0, 8).map(item => String(item?.value || "")).filter(Boolean).join("; ");
   throw new Error("YASNO address directory: street not found. Returned examples: " + (examples || "no matching street results"));
 }
-async function fetchDtekSchedule() {
-  // Resolve the address group from YASNO itself; never assume a stale DTEK group.
+async function fetchYasnoSchedule() {
+  // Resolve the address group directly from the YASNO address directory.
   const addressGroup = await fetchYasnoAddressGroup();
   const url = new URL("https://app.yasno.ua/api/blackout-service/public/shutdowns/regions/25/dsos/902/planned-outages");
   url.searchParams.set("_refresh", String(Date.now()));
@@ -765,361 +765,6 @@ async function fetchDtekSchedule() {
 }
 
 
-async function ensureDtekAddressCache(env) {
-  await env.DEYE_DB.prepare(
-    "CREATE TABLE IF NOT EXISTS dtek_address_cache (" +
-    "id INTEGER PRIMARY KEY CHECK (id = 1), payload TEXT, fetched_at INTEGER, last_attempt_at INTEGER)"
-  ).run();
-
-  // This cache is intentionally a singleton: retain only the latest DTEK response.
-  // The cleanup also removes extra rows if the table was created by an older schema.
-  await env.DEYE_DB.prepare(
-    "DELETE FROM dtek_address_cache WHERE id <> 1"
-  ).run();
-}
-
-async function readDtekAddressCache(env) {
-  await ensureDtekAddressCache(env);
-  const row = await env.DEYE_DB.prepare(
-    "SELECT payload, fetched_at, last_attempt_at FROM dtek_address_cache WHERE id = 1"
-  ).first();
-  if (!row?.payload) return null;
-  try {
-    return {
-      data: JSON.parse(row.payload),
-      fetchedAt: Number(row.fetched_at || 0),
-      lastAttemptAt: Number(row.last_attempt_at || 0)
-    };
-  } catch (_) {
-    return null;
-  }
-}
-
-
-async function ingestDtekAddressStatus(request, env) {
-  const expectedKey = env.DTEK_INGEST_SECRET;
-  const suppliedKey = request.headers.get("X-DTEK-Ingest-Key") || "";
-  if (!expectedKey || suppliedKey.length !== expectedKey.length || suppliedKey !== expectedKey) {
-    return json({ ok: false, error: "Unauthorized" }, 401);
-  }
-
-  const contentLength = Number(request.headers.get("Content-Length") || 0);
-  if (contentLength > 16000) return json({ ok: false, error: "Payload too large" }, 413);
-
-  let body;
-  try {
-    body = await request.json();
-  } catch (_) {
-    return json({ ok: false, error: "Invalid JSON" }, 400);
-  }
-
-  const house56 = body?.houses?.["56"];
-  const house58 = body?.houses?.["58"];
-  const observedAt = Number(body?.observedAt);
-  if (!house56 || !house58 || !Number.isFinite(observedAt) || observedAt <= 0) {
-    return json({ ok: false, error: "Both house records and observedAt are required" }, 400);
-  }
-
-  const normalize = item => ({
-    groups: Array.isArray(item.groups) ? item.groups.map(String).sort() : [],
-    hasCurrentOutage: item.hasCurrentOutage === true,
-    reason: String(item.reason || "").trim(),
-    startAt: String(item.startAt || "").trim(),
-    expectedEndAt: String(item.expectedEndAt || "").trim(),
-    outageType: String(item.outageType || "").trim()
-  });
-  const a = normalize(house56);
-  const b = normalize(house58);
-  if (JSON.stringify(a) !== JSON.stringify(b)) {
-    return json({ ok: false, error: "DTEK data for houses 56 and 58 differ; combined status was not saved." }, 409);
-  }
-  if (!a.groups.length || a.groups.some(group => !/^GPV\d+\.\d+$/i.test(group))) {
-    return json({ ok: false, error: "Invalid DTEK group data" }, 400);
-  }
-
-  const now = Date.now();
-  if (observedAt > now + 5 * 60 * 1000 || now - observedAt > 2 * 60 * 60 * 1000) {
-    return json({ ok: false, error: "DTEK observation is outside the accepted time window" }, 409);
-  }
-
-  await ensureDtekAddressCache(env);
-  const cached = await readDtekAddressCache(env);
-  const previousObservedAt = Number(cached?.data?.sourceObservedAt || 0);
-  if (observedAt < previousObservedAt) {
-    return json({ ok: false, error: "Older DTEK observation ignored", lastObservedAt: previousObservedAt }, 409);
-  }
-
-  const active = a.hasCurrentOutage || Boolean(a.reason || a.startAt || a.expectedEndAt || a.outageType);
-  const normalizedReason = a.reason.toLocaleLowerCase("uk-UA");
-  let kind = "none";
-  if (active && /(аварійн|екстрен|невідклад)/i.test(normalizedReason)) kind = "emergency";
-  else if (active && (a.outageType === "1" || a.outageType === "2" || /планов|стабілізаційн/i.test(normalizedReason))) kind = "planned";
-  else if (active) kind = "other";
-
-  const result = {
-    ok: true,
-    configured: true,
-    address: "м. Київ, вул. Академіка Заболотного, 56–58 (ввід 1)",
-    houseNumber: "56–58",
-    entrance: "1",
-    groups: a.groups,
-    active,
-    addressSpecific: true,
-    fallbackGroup: null,
-    kind,
-    reason: a.reason || (active ? "ДТЕК повідомляє про роботи/відключення без уточненої причини" : ""),
-    startAt: a.startAt || null,
-    expectedEndAt: a.expectedEndAt || null,
-    outageType: a.outageType || null,
-    updatedAt: body.sourceUpdatedAt || null,
-    source: "DTEK Kyiv Electric Networks via GitHub Actions",
-    combinedSeparateHouses: true,
-    stale: false,
-    lastSuccessfulAt: now,
-    sourceObservedAt: observedAt
-  };
-
-  await env.DEYE_DB.prepare(
-    "INSERT INTO dtek_address_cache (id, payload, fetched_at, last_attempt_at) " +
-    "VALUES (1, ?1, ?2, ?2) " +
-    "ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, " +
-    "fetched_at = excluded.fetched_at, last_attempt_at = excluded.last_attempt_at"
-  ).bind(JSON.stringify(result), now).run();
-
-  return json({ ok: true, saved: true, address: result.address, groups: result.groups, active: result.active, fetchedAt: now });
-}
-
-async function fetchDtekAddressStatus(env) {
-  const cookie = env.DTEK_SESSION_COOKIE;
-  const csrfToken = env.DTEK_CSRF_TOKEN;
-
-  await ensureDtekAddressCache(env);
-  const now = Date.now();
-  const cached = await readDtekAddressCache(env);
-
-  // Prefer the latest externally ingested result and avoid repeated DTEK requests.
-  if (cached?.data && cached.lastAttemptAt && now - cached.lastAttemptAt < 5 * 60 * 1000) {
-    const stale = now - cached.fetchedAt > 5 * 60 * 1000;
-    return {
-      ...cached.data,
-      stale,
-      lastSuccessfulAt: cached.fetchedAt,
-      warning: stale
-        ? "Показано останні успішно отримані дані ДТЕК. Наступна перевірка буде не раніше ніж через 5 хвилин."
-        : null
-    };
-  }
-
-  // GitHub Actions can refresh the address cache without DTEK browser-session secrets.
-  // If those secrets are absent, keep serving the last known result instead of hiding it.
-  if (!cookie || !csrfToken) {
-    if (cached?.data) {
-      const stale = now - cached.fetchedAt > 5 * 60 * 1000;
-      return {
-        ...cached.data,
-        stale,
-        lastSuccessfulAt: cached.fetchedAt,
-        warning: stale ? "Показано останні успішно отримані дані ДТЕК. Джерело тимчасово не оновило інформацію." : null
-      };
-    }
-    return {
-      ok: true,
-      configured: false,
-      address: "м. Київ, вул. Академіка Заболотного, 56–58 (ввід 1)",
-      message: "Адресний запит ДТЕК ще не налаштовано. Очікується перше оновлення через GitHub Actions."
-    };
-  }
-
-  await env.DEYE_DB.prepare(
-    "INSERT INTO dtek_address_cache (id, payload, fetched_at, last_attempt_at) " +
-    "VALUES (1, NULL, NULL, ?1) " +
-    "ON CONFLICT(id) DO UPDATE SET last_attempt_at = excluded.last_attempt_at"
-  ).bind(now).run();
-
-  const form = new URLSearchParams();
-  form.set("method", "getHomeNum");
-  form.set("data[0][name]", "city");
-  form.set("data[0][value]", "м. Київ");
-  form.set("data[1][name]", "street");
-  form.set("data[1][value]", "вул. Заболотного Академіка");
-  form.set("data[2][name]", "updateFact");
-  form.set("data[2][value]", String(Math.floor(now / 1000)));
-
-  const response = await fetch("https://www.dtek-kem.com.ua/ua/ajax", {
-    method: "POST",
-    headers: {
-      "Accept": "application/json, text/javascript, */*; q=0.01",
-      "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-      "X-Requested-With": "XMLHttpRequest",
-      "X-CSRF-Token": csrfToken,
-      "Cookie": cookie,
-      "Origin": "https://www.dtek-kem.com.ua",
-      "Referer": "https://www.dtek-kem.com.ua/ua/shutdowns",
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
-    },
-    body: form.toString()
-  });
-
-  const rawText = await response.text();
-  if (!response.ok) {
-    throw new Error(`DTEK address request failed: HTTP ${response.status}`);
-  }
-
-  const contentType = response.headers.get("content-type") || "unknown";
-  // DTEK sometimes responds with an Incapsula/WAF HTML page using HTTP 200.
-  // Treat it as a temporary source failure, never as "no outage"; the route
-  // handler will return the last successful singleton-cache payload instead.
-  if (contentType.toLowerCase().includes("text/html") || /incapsula|request unsuccessful|security challenge/i.test(rawText)) {
-    throw new Error(
-      "ДТЕК тимчасово блокує автоматичний запит (anti-bot/Incapsula). " +
-      "Останні успішні дані збережені; повторна перевірка відбудеться пізніше."
-    );
-  }
-
-  let payload;
-  try {
-    payload = JSON.parse(rawText);
-  } catch {
-    const preview = rawText.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 180);
-    throw new Error(
-      "ДТЕК повернув не JSON. HTTP " + response.status +
-      "; Content-Type: " + contentType +
-      "; URL: " + response.url +
-      "; відповідь: " + preview
-    );
-  }
-
-  const hasHouseMap = Boolean(payload && payload.data && typeof payload.data === "object" && !Array.isArray(payload.data));
-  if (!payload || !hasHouseMap) {
-    const diagnostic = {
-      httpStatus: response.status,
-      result: payload?.result ?? null,
-      hasData: Boolean(payload?.data),
-      topLevelKeys: payload && typeof payload === "object" ? Object.keys(payload).slice(0, 12) : [],
-      rawLength: rawText.length
-    };
-    throw new Error("Відповідь AJAX ДТЕК не містить списку будинків: " + JSON.stringify(diagnostic));
-  }
-
-  // Prefer an explicit DTEK range entry. If it is absent, combine houses 56 and 58
-  // only when all outage fields match exactly; never silently mix different schedules.
-  const rangeHouse = payload.data["56-58"] || payload.data["56–58"] || payload.data["56—58"];
-  const house56 = payload.data["56"];
-  const house58 = payload.data["58"];
-  let house = rangeHouse;
-  let combinedSeparateHouses = false;
-
-  if (!house && house56 && house58) {
-    const comparable = item => JSON.stringify({
-      sub_type: String(item.sub_type || "").trim(),
-      start_date: String(item.start_date || "").trim(),
-      end_date: String(item.end_date || "").trim(),
-      type: String(item.type || "").trim(),
-      sub_type_reason: Array.isArray(item.sub_type_reason) ? item.sub_type_reason.map(String).sort() : []
-    });
-    if (comparable(house56) !== comparable(house58)) {
-      throw new Error("Дані ДТЕК для будинків 56 і 58 відрізняються; спільний статус 56–58 не сформовано.");
-    }
-    house = house56;
-    combinedSeparateHouses = true;
-  }
-
-  if (!house) {
-    throw new Error("У відповіді ДТЕК немає ні загального запису 56–58, ні обох окремих записів 56 і 58. Доступні записи: " + Object.keys(payload.data).slice(0, 30).join(", "));
-  }
-
-  const reason = String(house.sub_type || "").trim();
-  const startAt = String(house.start_date || "").trim();
-  const expectedEndAt = String(house.end_date || "").trim();
-  const outageType = String(house.type || "").trim();
-  const groups = Array.isArray(house.sub_type_reason) ? house.sub_type_reason.map(String) : [];
-  const active = Boolean(reason || startAt || expectedEndAt || outageType);
-  const normalized = reason.toLocaleLowerCase("uk-UA");
-  let kind = "none";
-  if (active && /(аварійн|екстрен|невідклад)/i.test(normalized)) kind = "emergency";
-  else if (active && (outageType === "1" || outageType === "2" || /планов|стабілізаційн/i.test(normalized))) kind = "planned";
-  else if (active) kind = "other";
-
-  const result = {
-    ok: true,
-    configured: true,
-    address: "м. Київ, вул. Академіка Заболотного, 56–58 (ввід 1)",
-    houseNumber: "56–58",
-    entrance: "1",
-    groups,
-    active,
-    addressSpecific: active,
-    fallbackGroup: !active && groups.length ? String(groups[0]).replace(/^GPV/i, "") : null,
-    kind,
-    reason: reason || (active ? "ДТЕК повідомляє про роботи/відключення без уточненої причини" : ""),
-    startAt: startAt || null,
-    expectedEndAt: expectedEndAt || null,
-    outageType: outageType || null,
-    updatedAt: payload.updateTimestamp || null,
-    source: "DTEK Kyiv Electric Networks address AJAX",
-    combinedSeparateHouses,
-    stale: false,
-    lastSuccessfulAt: now
-  };
-
-  // Replace the single cached payload in place; never append DTEK history.
-  await env.DEYE_DB.prepare(
-    "INSERT INTO dtek_address_cache (id, payload, fetched_at, last_attempt_at) " +
-    "VALUES (1, ?1, ?2, ?2) " +
-    "ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, " +
-    "fetched_at = excluded.fetched_at, last_attempt_at = excluded.last_attempt_at"
-  ).bind(JSON.stringify(result), now).run();
-
-  return result;
-}
-
-async function dispatchDtekWorkflow(env, scheduledTime) {
-  const token = env.GITHUB_ACTIONS_TOKEN;
-  if (!token) {
-    console.warn("DTEK GitHub dispatch skipped: GITHUB_ACTIONS_TOKEN secret is not configured.");
-    return;
-  }
-
-  const scheduledAt = new Date(scheduledTime || Date.now());
-  if (scheduledAt.getUTCMinutes() % 30 !== 0) return;
-
-  // Keep a monotonic five-minute slot marker in D1; the 15-minute gate below controls dispatch frequency. This preserves compatibility with existing stored values and overlapping Cron invocations
-  // cannot dispatch the same GitHub workflow more than once.
-  await env.DEYE_DB.prepare(
-    "CREATE TABLE IF NOT EXISTS dtek_dispatch_state (" +
-    "id INTEGER PRIMARY KEY CHECK (id = 1), last_bucket INTEGER NOT NULL)"
-  ).run();
-
-  const bucket = Math.floor(scheduledAt.getTime() / 300000);
-  await env.DEYE_DB.prepare(
-    "INSERT OR IGNORE INTO dtek_dispatch_state (id, last_bucket) VALUES (1, -1)"
-  ).run();
-  const claim = await env.DEYE_DB.prepare(
-    "UPDATE dtek_dispatch_state SET last_bucket = ?1 WHERE id = 1 AND last_bucket < ?1"
-  ).bind(bucket).run();
-  if (Number(claim.meta?.changes || 0) !== 1) return;
-
-  const response = await fetch(
-    "https://api.github.com/repos/DenisVashkulat/deye-iphone-widget/actions/workflows/dtek-cloud-probe.yml/dispatches",
-    {
-      method: "POST",
-      headers: {
-        "Accept": "application/vnd.github+json",
-        "Authorization": `Bearer ${token}`,
-        "X-GitHub-Api-Version": "2022-11-28",
-        "Content-Type": "application/json",
-        "User-Agent": "Deye-Monitor-Cloudflare-Cron"
-      },
-      body: JSON.stringify({ ref: "main" })
-    }
-  );
-
-  if (!response.ok) {
-    const detail = (await response.text()).slice(0, 500);
-    throw new Error(`GitHub workflow dispatch failed: HTTP ${response.status}: ${detail}`);
-  }
-  console.log("DTEK GitHub workflow dispatched", { scheduledAt: scheduledAt.toISOString() });
-}
 
 export default {
   async fetch(request, env) {
@@ -1133,9 +778,7 @@ export default {
           DEYE_PASSWORD: Boolean(env.DEYE_PASSWORD),
           DEYE_STATION_ID: Boolean(env.DEYE_STATION_ID),
           DEYE_DEVICE_SN: Boolean(env.DEYE_DEVICE_SN),
-          DTEK_SESSION_COOKIE: Boolean(env.DTEK_SESSION_COOKIE),
-          DTEK_CSRF_TOKEN: Boolean(env.DTEK_CSRF_TOKEN)
-        },
+          },
         note: "Only presence is reported; secret values are never returned."
       });
     }
@@ -1189,49 +832,17 @@ export default {
         return json({ error: error.message || "Unknown server error" }, 500);
       }
     }
-    if (url.pathname === "/api/dtek-schedule") {
+    if (url.pathname === "/api/yasno-schedule") {
       if (request.method === "OPTIONS") return json({ ok: true });
       if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
       try {
-        return json(await fetchDtekSchedule());
+        return json(await fetchYasnoSchedule());
       } catch (error) {
-        console.error("DTEK schedule error:", error);
-        return json({ error: error.message || "Could not load DTEK schedule" }, 502);
+        console.error("YASNO schedule error:", error);
+        return json({ error: error.message || "Could not load YASNO schedule" }, 502);
       }
     }
-    if (url.pathname === "/api/dtek-ingest") {
-      if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
-      try {
-        return await ingestDtekAddressStatus(request, env);
-      } catch (error) {
-        console.error("DTEK ingest error:", error);
-        return json({ ok: false, error: error.message || "Could not save DTEK status" }, 500);
-      }
-    }
-    if (url.pathname === "/api/dtek-address") {
-      if (request.method === "OPTIONS") return json({ ok: true });
-      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
-      try {
-        return json(await fetchDtekAddressStatus(env));
-      } catch (error) {
-        console.error("DTEK address status error:", error);
-        try {
-          const cached = await readDtekAddressCache(env);
-          if (cached?.data) {
-            return json({
-              ...cached.data,
-              stale: true,
-              lastSuccessfulAt: cached.fetchedAt,
-              warning: "ДТЕК тимчасово недоступний. Показано останні успішно отримані дані; перевірте час останнього оновлення.",
-              refreshError: error.message || "DTEK request failed"
-            });
-          }
-        } catch (cacheError) {
-          console.error("Could not read DTEK address cache:", cacheError.message);
-        }
-        return json({ ok: false, error: error.message || "Could not load DTEK address status" }, 502);
-      }
-    }
+
 
     if (url.pathname === "/api/push/public-key") {
       if (request.method === "OPTIONS") return json({ ok: true });
@@ -1340,8 +951,5 @@ export default {
       }
     })());
 
-    ctx.waitUntil(dispatchDtekWorkflow(env, controller.scheduledTime).catch(error => {
-      console.error("Scheduled DTEK GitHub dispatch failed:", error);
-    }));
   }
 };

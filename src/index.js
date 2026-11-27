@@ -1081,7 +1081,7 @@ async function dispatchDtekWorkflow(env, scheduledTime) {
   }
 
   const scheduledAt = new Date(scheduledTime || Date.now());
-  if (scheduledAt.getUTCMinutes() % 15 !== 0) return;
+  if (scheduledAt.getUTCMinutes() % 30 !== 0) return;
 
   // Keep a monotonic five-minute slot marker in D1; the 15-minute gate below controls dispatch frequency. This preserves compatibility with existing stored values and overlapping Cron invocations
   // cannot dispatch the same GitHub workflow more than once.

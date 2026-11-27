@@ -1073,6 +1073,53 @@ async function fetchDtekAddressStatus(env) {
   return result;
 }
 
+async function dispatchDtekWorkflow(env, scheduledTime) {
+  const token = env.GITHUB_ACTIONS_TOKEN;
+  if (!token) {
+    console.warn("DTEK GitHub dispatch skipped: GITHUB_ACTIONS_TOKEN secret is not configured.");
+    return;
+  }
+
+  const scheduledAt = new Date(scheduledTime || Date.now());
+  if (scheduledAt.getUTCMinutes() % 5 !== 0) return;
+
+  // Keep a single five-minute bucket in D1 so overlapping Cron invocations
+  // cannot dispatch the same GitHub workflow more than once.
+  await env.DEYE_DB.prepare(
+    "CREATE TABLE IF NOT EXISTS dtek_dispatch_state (" +
+    "id INTEGER PRIMARY KEY CHECK (id = 1), last_bucket INTEGER NOT NULL)"
+  ).run();
+
+  const bucket = Math.floor(scheduledAt.getTime() / 300000);
+  await env.DEYE_DB.prepare(
+    "INSERT OR IGNORE INTO dtek_dispatch_state (id, last_bucket) VALUES (1, -1)"
+  ).run();
+  const claim = await env.DEYE_DB.prepare(
+    "UPDATE dtek_dispatch_state SET last_bucket = ?1 WHERE id = 1 AND last_bucket < ?1"
+  ).bind(bucket).run();
+  if (Number(claim.meta?.changes || 0) !== 1) return;
+
+  const response = await fetch(
+    "https://api.github.com/repos/DenisVashkulat/deye-iphone-widget/actions/workflows/dtek-cloud-probe.yml/dispatches",
+    {
+      method: "POST",
+      headers: {
+        "Accept": "application/vnd.github+json",
+        "Authorization": `Bearer ${token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "Deye-Monitor-Cloudflare-Cron"
+      },
+      body: JSON.stringify({ ref: "main" })
+    }
+  );
+
+  if (!response.ok) {
+    const detail = (await response.text()).slice(0, 500);
+    throw new Error(`GitHub workflow dispatch failed: HTTP ${response.status}: ${detail}`);
+  }
+  console.log("DTEK GitHub workflow dispatched", { scheduledAt: scheduledAt.toISOString() });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -1291,5 +1338,9 @@ export default {
         console.error("Scheduled Deye refresh or push notification failed:", error);
       }
     })());
+
+    ctx.waitUntil(dispatchDtekWorkflow(env, controller.scheduledTime).catch(error => {
+      console.error("Scheduled DTEK GitHub dispatch failed:", error);
+    }));
   }
 };

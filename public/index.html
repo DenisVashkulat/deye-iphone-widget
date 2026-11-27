@@ -57,6 +57,7 @@
     .yasno-chip.off{background:#482832;color:#ffc4c8}.yasno-chip.on{background:#173d35;color:#a6f0d0}
     .yasno-status{margin-top:14px;padding:10px 12px;border-radius:10px;background:#17263b;font-size:13px;line-height:1.45}
     .yasno-status.off{border-left:3px solid var(--red)}.yasno-status.on{border-left:3px solid var(--green)}
+    .yasno-emergency{border-color:#8b3945;background:#281923}.yasno-alert-title{font-weight:700;color:#ff929c;font-size:14px;margin:8px 0}.yasno-alert-note{font-size:12px;line-height:1.45;color:#e7b8bd}.yasno-status.emergency{border-left:3px solid #f06b76;background:#3b202b;color:#ffd4d8}
             @media(max-width:600px){.yasno-days{grid-template-columns:1fr}}
   </style>
 </head>
@@ -272,7 +273,15 @@ function yasnoTime(minute){
   return h+":"+m;
 }
 function yasnoRenderDay(label, day){
-  if(!day || !Array.isArray(day.slots)) return '<div class="yasno-day"><div class="empty">Графік недоступний</div></div>';
+  if(!day) return '<div class="yasno-day"><div class="empty">Графік недоступний</div></div>';
+  const date=day.date?new Date(day.date).toLocaleDateString("uk-UA",{day:"2-digit",month:"long"}):"";
+  if(day.status==="EmergencyShutdowns"){
+    return '<div class="yasno-day yasno-emergency"><div class="yasno-day-head"><strong>'+label+'</strong><span>'+date+'</span></div><div class="yasno-alert-title">⚠️ Аварійне відключення</div><div class="yasno-alert-note">YASNO повідомляє про аварійний режим. Звичайний графік тимчасово не діє.</div></div>';
+  }
+  if(day.status==="WaitingForSchedule"){
+    return '<div class="yasno-day"><div class="yasno-day-head"><strong>'+label+'</strong><span>'+date+'</span></div><div class="empty">Графік ще не опубліковано</div></div>';
+  }
+  if(!Array.isArray(day.slots)) return '<div class="yasno-day"><div class="empty">Графік недоступний</div></div>';
   const slots=day.slots;
   const timeline=slots.map(slot=>{
     const outage=slot.type==="Definite";
@@ -283,7 +292,6 @@ function yasnoRenderDay(label, day){
     const outage=slot.type==="Definite";
     return '<span class="yasno-chip '+(outage?'off':'on')+'">'+yasnoTime(slot.start)+'–'+yasnoTime(slot.end)+' '+(outage?'немає світла':'світло є')+'</span>';
   }).join("");
-  const date=day.date?new Date(day.date).toLocaleDateString("uk-UA",{day:"2-digit",month:"long"}):"";
   return '<div class="yasno-day"><div class="yasno-day-head"><strong>'+label+'</strong><span>'+date+'</span></div><div class="yasno-timeline">'+timeline+'</div><div class="yasno-intervals">'+chips+'</div></div>';
 }
 function renderyasnoSchedule(data){
@@ -303,6 +311,16 @@ function renderyasnoSchedule(data){
   const todaySlots=data.today?.slots||[];
   const current=todaySlots.find(slot=>minute>=slot.start&&minute<slot.end);
   const status=el("yasno-current");
+  if(data.today?.status==="EmergencyShutdowns"){
+    status.className="yasno-status emergency";
+    status.textContent="⚠️ YASNO повідомляє про аварійне відключення. Плановий графік тимчасово не діє.";
+    return;
+  }
+  if(data.today?.status==="WaitingForSchedule"){
+    status.className="yasno-status";
+    status.textContent="YASNO ще не опублікував графік на сьогодні.";
+    return;
+  }
   if(!current){status.className="yasno-status";status.textContent="Поточний інтервал не визначений. Перевірте оновлення графіка.";return;}
   const isOff=current.type==="Definite";
   const next=todaySlots.find(slot=>slot.start>=current.end);

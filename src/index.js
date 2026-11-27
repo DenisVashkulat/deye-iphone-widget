@@ -1081,16 +1081,16 @@ async function dispatchDtekWorkflow(env, scheduledTime) {
   }
 
   const scheduledAt = new Date(scheduledTime || Date.now());
-  if (scheduledAt.getUTCMinutes() % 5 !== 0) return;
+  if (scheduledAt.getUTCMinutes() % 15 !== 0) return;
 
-  // Keep a single five-minute bucket in D1 so overlapping Cron invocations
+  // Keep a single fifteen-minute bucket in D1 so overlapping Cron invocations
   // cannot dispatch the same GitHub workflow more than once.
   await env.DEYE_DB.prepare(
     "CREATE TABLE IF NOT EXISTS dtek_dispatch_state (" +
     "id INTEGER PRIMARY KEY CHECK (id = 1), last_bucket INTEGER NOT NULL)"
   ).run();
 
-  const bucket = Math.floor(scheduledAt.getTime() / 300000);
+  const bucket = Math.floor(scheduledAt.getTime() / 900000);
   await env.DEYE_DB.prepare(
     "INSERT OR IGNORE INTO dtek_dispatch_state (id, last_bucket) VALUES (1, -1)"
   ).run();

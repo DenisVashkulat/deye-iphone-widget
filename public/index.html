@@ -462,8 +462,7 @@ initPushNotifications();
 refreshStatus();
 refreshHistory(currentRange);
 refreshyasnoSchedule();
-// Refresh the public YASNO schedule more frequently; yasno address checks
-// remain at five minutes to avoid repeatedly triggering its anti-bot protection.
+// Refresh the public YASNO schedule periodically.
 setInterval(refreshyasnoSchedule,2*60*1000);
 setInterval(refreshStatus,15000);
 setInterval(updateRuntime,1000);

@@ -1107,6 +1107,7 @@ async function dispatchDtekWorkflow(env, scheduledTime) {
         "Accept": "application/vnd.github+json",
         "Authorization": `Bearer ${token}`,
         "X-GitHub-Api-Version": "2022-11-28",
+        "Content-Type": "application/json",
         "User-Agent": "Deye-Monitor-Cloudflare-Cron"
       },
       body: JSON.stringify({ ref: "main" })
